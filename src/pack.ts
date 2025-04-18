@@ -5,6 +5,7 @@ import * as path from 'path';
 import { Command } from 'commander';
 import * as glob from 'glob';
 import ignore from 'ignore';
+import { analyzeXmlTokens } from './tokenCounter';
 
 // Map file extensions to language names for syntax highlighting
 const EXT_TO_LANG: Record<string, string> = {
@@ -160,13 +161,15 @@ async function main() {
   
   program
     .name('pack')
-    .description('Pack files into a single prompt for LLMs')
+    .description('Pack files into a single prompt for LLMs with token counting')
     .argument('<paths...>', 'Paths to files or directories to include')
     .option('-i, --include-hidden', 'Include hidden files and directories', false)
     .option('-g, --ignore-gitignore', 'Ignore .gitignore files', false)
     .option('-n, --no-line-numbers', 'Exclude line numbers')
     .option('-o, --output <file>', 'Output to a file instead of stdout')
+    .option('-t, --tokens-only', 'Output only token count information without XML content')
     .version('1.0.0')
+    .addHelpText('after', '\nToken Analysis:\n  The output includes token count estimation using tiktoken.\n  This helps in understanding LLM context window usage.')
     .parse(process.argv);
   
   const options = program.opts();
@@ -198,10 +201,27 @@ async function main() {
   results.push('</documents>');
   const output = results.join('\n');
   
-  if (options.output) {
+  // Analyze token usage
+  const tokenAnalysis = analyzeXmlTokens(output);
+  
+  // Function to print token analysis
+  const printTokenAnalysis = () => {
+    console.log(`\nToken Analysis:`);
+    console.log(`- Total Tokens: ${tokenAnalysis.totalTokens.toLocaleString()}`);
+    console.log(`- Document Count: ${tokenAnalysis.documentCount}`);
+    console.log(`- Average Tokens Per Document: ${tokenAnalysis.averageTokensPerDocument}`);
+  };
+  
+  if (options.tokensOnly) {
+    // Only output token information
+    console.log(`${tokenAnalysis.totalTokens}`);
+  } else if (options.output) {
     fs.writeFileSync(options.output, output);
+    // Print token information to console even when writing to file
+    printTokenAnalysis();
   } else {
     console.log(output);
+    printTokenAnalysis();
   }
 }
 
