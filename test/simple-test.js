@@ -28,7 +28,7 @@ const toolRequest = JSON.stringify({
   id: 2,
   method: "tools/call",
   params: {
-    name: "sidebar",
+    name: "second-opinion",
     arguments: {
       prompt: "Explain this code briefly",
       paths: ["test/complex.js"]
@@ -55,7 +55,7 @@ server.stdout.on('data', (data) => {
   console.log(`Server output: ${text.trim()}`);
   
   // Look for patterns in output to determine what to do next
-  if (output.includes('MCP Sidebar Server started')) {
+  if (output.includes('MCP Sage Server started')) {
     console.log('Server is ready, sending initialization request');
     server.stdin.write(initRequest);
   }

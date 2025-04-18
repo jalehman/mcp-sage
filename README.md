@@ -1,16 +1,26 @@
-# MCP Sidebar Server
+# MCP Server with Context Tools
 
-An MCP (Model Context Protocol) server that provides a `sidebar` tool for sending prompts to Gemini 2.5 Pro with file context.
+An MCP (Model Context Protocol) server that provides tools for sending prompts to Gemini 2.5 Pro with file context and getting code edit suggestions.
 
 ## Overview
 
-This project implements an MCP server that exposes a `sidebar` tool which:
+This project implements an MCP server that exposes two tools:
+
+### second-opinion tool
 
 1. Takes a prompt and a list of file paths as input
 2. Packs the files into a structured XML format
 3. Checks if the combined content is within Gemini's token limit (1M tokens)
 4. Sends the combined prompt + context to Gemini 2.5 Pro
 5. Returns the model's response
+
+### expert-review tool
+
+1. Takes an instruction for code changes and a list of file paths as input
+2. Packs the files into a structured XML format
+3. Creates a specialized prompt that requests responses in SEARCH/REPLACE block format
+4. Sends the combined context + instruction to Gemini 2.5 Pro
+5. Returns edit suggestions in a standardized format for easy implementation
 
 ## Prerequisites
 
@@ -21,8 +31,8 @@ This project implements an MCP server that exposes a `sidebar` tool which:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/mcp-sidebar.git
-cd mcp-sidebar
+git clone https://github.com/your-username/mcp-sage.git
+cd mcp-sage
 
 # Install dependencies
 npm install
@@ -49,13 +59,16 @@ You can start the server in two modes:
 npm start
 ```
 
-#### 2. HTTP Mode
+#### 2. MCP Connection
 
-```bash
-npm run start:http
+After running `npm run build`, add the following to your MCP configuration:
 
-# With a custom port
-npm run start:http -- --port 3001
+```sh
+GEMINI_API_KEY=X node /path/to/this/repo/dist/index.js
+```
+
+That's it!
+
 ```
 
 ### Debugging and Monitoring
@@ -77,9 +90,11 @@ Sending request to Gemini with 1,234 tokens...
 Received response from Gemini in 982ms
 ```
 
-### Using the `sidebar` Tool
+### Using the Tools
 
-The `sidebar` tool accepts the following parameters:
+#### second-opinion Tool
+
+The `second-opinion` tool accepts the following parameters:
 
 - `prompt` (string, required): The prompt to send to Gemini
 - `paths` (array of strings, required): List of file paths to include as context
@@ -92,7 +107,7 @@ Example MCP tool call (using JSON-RPC 2.0):
   "id": 1,
   "method": "tools/call",
   "params": {
-    "name": "sidebar",
+    "name": "second-opinion",
     "arguments": {
       "prompt": "Explain how this code works",
       "paths": ["path/to/file1.js", "path/to/file2.js"]
@@ -101,20 +116,75 @@ Example MCP tool call (using JSON-RPC 2.0):
 }
 ```
 
-## Running the Test
+#### expert-review Tool
 
-To run a simple test:
+The `expert-review` tool accepts the following parameters:
+
+- `instruction` (string, required): The specific changes or improvements needed
+- `paths` (array of strings, required): List of file paths to include as context
+
+Example MCP tool call (using JSON-RPC 2.0):
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "expert-review",
+    "arguments": {
+      "instruction": "Add error handling to the function",
+      "paths": ["path/to/file1.js", "path/to/file2.js"]
+    }
+  }
+}
+```
+
+The response will contain SEARCH/REPLACE blocks that you can use to implement the suggested changes:
+
+```
+<<<<<<< SEARCH
+function getData() {
+  return fetch('/api/data')
+    .then(res => res.json());
+}
+=======
+function getData() {
+  return fetch('/api/data')
+    .then(res => {
+      if (!res.ok) {
+        throw new Error(`HTTP error! Status: ${res.status}`);
+      }
+      return res.json();
+    })
+    .catch(error => {
+      console.error('Error fetching data:', error);
+      throw error;
+    });
+}
+>>>>>>> REPLACE
+```
+
+## Running the Tests
+
+To test the tools:
 
 ```bash
+# Test the second-opinion tool
 GEMINI_API_KEY=your_api_key_here node test/run-test.js
+
+# Test the expert-review tool
+GEMINI_API_KEY=your_api_key_here node test/test-expert.js
 ```
 
 ## Project Structure
 
-- `src/index.ts`: The main MCP server implementation
+- `src/index.ts`: The main MCP server implementation with tool definitions
 - `src/pack.ts`: Tool for packing files into a structured XML format
 - `src/tokenCounter.ts`: Utilities for counting tokens in a prompt
 - `src/gemini.ts`: Gemini API client implementation
+- `test/run-test.js`: Test for the second-opinion tool
+- `test/test-expert.js`: Test for the expert-review tool
 
 ## License
 

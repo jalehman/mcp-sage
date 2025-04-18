@@ -66,16 +66,16 @@ setTimeout(() => {
           
           // If it's the initialize response, send the tool call
           if (response.id === 1 && response.result) {
-            console.log('Sending second-opinion tool request...');
+            console.log('Sending expert-review tool request...');
             
             const toolRequest = {
               jsonrpc: "2.0",
               id: 2,
               method: "tools/call",
               params: {
-                name: "second-opinion",
+                name: "expert-review",
                 arguments: {
-                  prompt: "Explain how the code in test/complex.js works in a concise summary",
+                  instruction: "Add a function to calculate the factorial of a number recursively",
                   paths: ["test/complex.js"]
                 }
               }
@@ -84,9 +84,20 @@ setTimeout(() => {
             server.stdin.write(JSON.stringify(toolRequest) + '\n');
           }
           
-          // If it's the tool response, terminate the test
+          // If it's the tool response, check for SEARCH/REPLACE format and terminate
           if (response.id === 2) {
-            console.log('Test completed successfully');
+            console.log('Expert-review tool response received');
+            
+            // Check if the response contains SEARCH/REPLACE blocks
+            if (response.result && response.result.content && response.result.content[0]) {
+              const text = response.result.content[0].text;
+              if (text.includes("<<<<<<< SEARCH") && text.includes("=======") && text.includes(">>>>>>> REPLACE")) {
+                console.log('SUCCESS: Response contains SEARCH/REPLACE blocks as expected');
+              } else {
+                console.log('WARNING: Response does not contain SEARCH/REPLACE blocks');
+              }
+            }
+            
             setTimeout(() => {
               server.kill();
               process.exit(0);

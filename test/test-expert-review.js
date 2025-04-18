@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Define the inputs
-const prompt = "Explain how the code in test/complex.js works";
+const instruction = "Add a function that calculates the factorial of a number recursively";
 const paths = ["test/complex.js"];
 
 // Create a test input JSON for the MCP server
@@ -28,15 +28,15 @@ process.stdin.once('data', (data) => {
     const response = JSON.parse(data.toString());
     console.log("Initialized:", response);
 
-    // Call the sidebar tool
+    // Call the expert-review tool
     const toolRequest = {
       jsonrpc: "2.0",
       id: 2,
       method: "tools/call",
       params: {
-        name: "sidebar",
+        name: "expert-review",
         arguments: {
-          prompt,
+          instruction,
           paths
         }
       }
@@ -50,6 +50,16 @@ process.stdin.once('data', (data) => {
       try {
         const toolResponse = JSON.parse(data.toString());
         console.log("Tool Response:", toolResponse);
+        
+        // Check if the response contains the expected SEARCH/REPLACE format
+        if (toolResponse.result && toolResponse.result.content) {
+          const text = toolResponse.result.content[0].text;
+          if (text.includes("<<<<<<< SEARCH") && text.includes("=======") && text.includes(">>>>>>> REPLACE")) {
+            console.log("SUCCESS: Response contains SEARCH/REPLACE blocks");
+          } else {
+            console.log("WARNING: Response does not contain expected SEARCH/REPLACE format");
+          }
+        }
       } catch (err) {
         console.error("Error parsing tool response:", err);
       }
