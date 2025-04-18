@@ -1,6 +1,10 @@
-# MCP Server with Context Tools
+# `mcp-sage`
 
-An MCP (Model Context Protocol) server that provides tools for sending prompts to Gemini 2.5 Pro with file context and getting code edit suggestions.
+An MCP (Model Context Protocol) server that provides tools for sending prompts to another LLM (currently only Gemini 2.5 Pro) that embed all referenced filepaths (recursively for folders) in the prompt. Useful for getting second opinions or detailed code reviews from a model that can handle tons of context accurately.
+
+## Rationale
+
+I make heavy use of Claude Code. It's a great product that works well for my workflow. Newer models with large amounts of context seem really useful though for dealing with more complex codebases where more context is needed. This lets me continue to use Claude Code as a development tool while leveraging the large context of Gemini 2.5 Pro to augment Claude Code's limited context.
 
 ## Overview
 
@@ -8,7 +12,7 @@ This project implements an MCP server that exposes two tools:
 
 ### second-opinion tool
 
-1. Takes a prompt and a list of file paths as input
+1. Takes a prompt and a list of file/dir paths as input
 2. Packs the files into a structured XML format
 3. Checks if the combined content is within Gemini's token limit (1M tokens)
 4. Sends the combined prompt + context to Gemini 2.5 Pro
@@ -16,11 +20,12 @@ This project implements an MCP server that exposes two tools:
 
 ### expert-review tool
 
-1. Takes an instruction for code changes and a list of file paths as input
+1. Takes an instruction for code changes and a list of file/dir paths as input
 2. Packs the files into a structured XML format
-3. Creates a specialized prompt that requests responses in SEARCH/REPLACE block format
-4. Sends the combined context + instruction to Gemini 2.5 Pro
-5. Returns edit suggestions in a standardized format for easy implementation
+3. Checks if the combined content is within Gemini's token limit (1M tokens)
+4. Creates a specialized prompt instructing the model to format responses using SEARCH/REPLACE blocks
+5. Sends the combined context + instruction to Gemini 2.5 Pro
+6. Returns edit suggestions formatted as SEARCH/REPLACE blocks for easy implementation
 
 ## Prerequisites
 
@@ -49,27 +54,19 @@ Set the following environment variable:
 
 ## Usage
 
-### Starting the Server
-
-You can start the server in two modes:
-
-#### 1. Standard I/O (CLI) Mode
-
-```bash
-npm start
-```
-
-#### 2. MCP Connection
-
-After running `npm run build`, add the following to your MCP configuration:
+After building with `npm run build`, add the following to your MCP configuration:
 
 ```sh
-GEMINI_API_KEY=X node /path/to/this/repo/dist/index.js
+GEMINI_API_KEY=XXX node /path/to/this/repo/dist/index.js
 ```
 
-That's it!
+## Prompting
 
-```
+To get a second opinion on something just ask for a second opinion.
+
+To get a code review, ask for a code review or expert review.
+
+Both of these benefit from providing paths of files that you wnat to be included in context, but if omitted the host LLM will probably infer what to include.
 
 ### Debugging and Monitoring
 
