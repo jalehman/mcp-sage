@@ -89,11 +89,15 @@ function createServer(): McpServer {
   // Add the sidebar tool
   server.tool(
     "sidebar",
-    "Send a prompt to Gemini 2.5 including the full content of all files contained
-within `paths`.",
+    `Send a prompt to Gemini 2.5 including the full content of all files contained
+     within paths.
+
+     Gemini can handle tons of context, so feel free to include as much as you think
+     is relevant. If you include too much it will error and tell you, and then you can
+     include less. Err on the side of including more context.`,
     {
       prompt: z.string().describe('The prompt to send to Gemini'),
-      paths: z.array(z.string()).describe('Paths to include as context')
+      paths: z.array(z.string()).describe('Paths to include as context. Including directories will include all files contained within recursively.')
     },
     async ({ prompt, paths }, { sendNotification }) => {
       try {
