@@ -96,9 +96,11 @@ function createServer(): McpServer {
     "second-opinion",
     `Send a prompt to another model for a second opinion including the full content of all files contained within the paths that you specify.
 
-    Do not worry about context limits; feel free to include as much as you think is relevant. If you include too much it will error and tell you, and then you can include less. Err on the side of including more context.`,
+    Do not worry about context limits; feel free to include as much as you think is relevant. If you include too much it will error and tell you, and then you can include less. Err on the side of including more context.
+
+    If the user hasn't provided specific paths, use as many paths to files or directories as you're aware of that are useful in the context of the prompt.`,
     {
-      prompt: z.string().describe("The prompt to send to Gemini"),
+      prompt: z.string().describe("The prompt to send to the external model."),
       paths: z
         .array(z.string())
         .describe(
@@ -210,11 +212,15 @@ function createServer(): McpServer {
     "expert-review",
     `Send code to another model for expert review and get specific edit suggestions as SEARCH/REPLACE blocks.
 
-    This tool includes the full content of all files in the specified paths and instructs the model to return edit suggestions in a specific format with search and replace blocks.`,
+    Use this tool any time the user asks for a "code review" or "expert review".
+
+    This tool includes the full content of all files in the specified paths and instructs the model to return edit suggestions in a specific format with search and replace blocks.
+
+    If the user hasn't provided specific paths, use as many paths to files or directories as you're aware of that are useful in the context of the prompt.`,
     {
       instruction: z
         .string()
-        .describe("The specific changes or improvements needed"),
+        .describe("The specific changes or improvements needed."),
       paths: z
         .array(z.string())
         .describe(
