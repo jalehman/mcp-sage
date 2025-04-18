@@ -17,7 +17,7 @@ This project draws inspiration from two other open source projects:
 
 This project implements an MCP server that exposes two tools:
 
-### second-opinion tool
+### `second-opinion`
 
 1. Takes a prompt and a list of file/dir paths as input
 2. Packs the files into a structured XML format
@@ -25,7 +25,7 @@ This project implements an MCP server that exposes two tools:
 4. Sends the combined prompt + context to Gemini 2.5 Pro
 5. Returns the model's response
 
-### expert-review tool
+### `expert-review`
 
 1. Takes an instruction for code changes and a list of file/dir paths as input
 2. Packs the files into a structured XML format
