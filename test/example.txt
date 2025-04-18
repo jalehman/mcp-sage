@@ -1,0 +1,3 @@
+This is an example file
+with multiple lines
+to test our packing functionality.
