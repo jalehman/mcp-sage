@@ -79,17 +79,18 @@ function createServer(): McpServer {
   const server = new McpServer({
     name: "MCP Sidebar Server",
     version: "1.0.0"
-  }, { 
-    capabilities: { 
+  }, {
+    capabilities: {
       logging: {}, // Support for sending log messages to clients
       tools: { listChanged: true } // Support for tools and notifying of tool list changes
-    } 
+    }
   });
 
   // Add the sidebar tool
   server.tool(
     "sidebar",
-    "Send a prompt to Gemini 2.5 with context from specified files",
+    "Send a prompt to Gemini 2.5 including the full content of all files contained
+within `paths`.",
     {
       prompt: z.string().describe('The prompt to send to Gemini'),
       paths: z.array(z.string()).describe('Paths to include as context')
