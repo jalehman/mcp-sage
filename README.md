@@ -6,6 +6,13 @@ An MCP (Model Context Protocol) server that provides tools for sending prompts t
 
 I make heavy use of Claude Code. It's a great product that works well for my workflow. Newer models with large amounts of context seem really useful though for dealing with more complex codebases where more context is needed. This lets me continue to use Claude Code as a development tool while leveraging the large context of Gemini 2.5 Pro to augment Claude Code's limited context.
 
+## Inspiration
+
+This project draws inspiration from two other open source projects:
+
+- [simonw/files-to-prompt](https://github.com/simonw/files-to-prompt) for the file compression
+- [asadm/vibemode](https://github.com/asadm/vibemode) for the idea and prompt to send the entire repo to Gemini for wholesale edit suggestions
+
 ## Overview
 
 This project implements an MCP server that exposes two tools:
