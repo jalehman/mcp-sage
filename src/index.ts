@@ -93,12 +93,12 @@ function createServer(): McpServer {
 
   // Add the second-opinion tool
   server.tool(
-    "second-opinion",
-    `Send a prompt to another model for a second opinion including the full content of all files contained within the paths that you specify.
+    "sage-opinion",
+    `Send a prompt to sage-like model for its opinion on a matter.
 
-    Do not worry about context limits; feel free to include as much as you think is relevant. If you include too much it will error and tell you, and then you can include less. Err on the side of including more context.
+    Include the paths to all relevant files and/or directories that are pertinent to the matter.
 
-    If the user hasn't provided specific paths, use as many paths to files or directories as you're aware of that are useful in the context of the prompt.`,
+    Do not worry about context limits; feel free to include as much as you think is relevant. If you include too much it will error and tell you, and then you can include less. Err on the side of including more context.`,
     {
       prompt: z.string().describe("The prompt to send to the external model."),
       paths: z
@@ -209,10 +209,10 @@ function createServer(): McpServer {
 
   // Add the expert-review tool for suggesting code edits using the SEARCH/REPLACE format
   server.tool(
-    "expert-review",
-    `Send code to another model for expert review and get specific edit suggestions as SEARCH/REPLACE blocks.
+    "sage-review",
+    `Send code to the sage model for expert review and get specific edit suggestions as SEARCH/REPLACE blocks.
 
-    Use this tool any time the user asks for a "code review" or "expert review".
+    Use this tool any time the user asks for a "sage review" or "code review" or "expert review".
 
     This tool includes the full content of all files in the specified paths and instructs the model to return edit suggestions in a specific format with search and replace blocks.
 
@@ -251,6 +251,8 @@ function createServer(): McpServer {
         ONLY EVER RETURN CODE IN A *SEARCH/REPLACE BLOCK*!
 
         Some of the changes may not be relevant to some files - SKIP THOSE IN YOUR RESPONSE.
+
+        Provide rationale for each change above each SEARCH/REPLACE block.
 
         Make sure search block exists in original file and is NOT empty.
 
