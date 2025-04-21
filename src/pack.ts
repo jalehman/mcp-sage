@@ -8,7 +8,7 @@ import ignore from 'ignore';
 import { analyzeXmlTokens } from './tokenCounter';
 
 // Map file extensions to language names for syntax highlighting
-const EXT_TO_LANG: Record<string, string> = {
+export const EXT_TO_LANG: Record<string, string> = {
   ts: 'typescript',
   js: 'javascript',
   jsx: 'javascript',
@@ -33,10 +33,8 @@ const EXT_TO_LANG: Record<string, string> = {
   sh: 'bash',
 };
 
-let globalIndex = 1;
-
 // Add line numbers to content
-function addLineNumbers(content: string): string {
+export function addLineNumbers(content: string): string {
   const lines = content.split('\n');
   const padding = String(lines.length).length;
   
@@ -46,7 +44,7 @@ function addLineNumbers(content: string): string {
 }
 
 // Read .gitignore file and return an ignore instance
-function readGitignore(dirPath: string): ignore.Ignore {
+export function readGitignore(dirPath: string): ignore.Ignore {
   const ig = ignore();
   
   const gitignorePath = path.join(dirPath, '.gitignore');
@@ -63,14 +61,14 @@ function readGitignore(dirPath: string): ignore.Ignore {
 }
 
 // Format file in Anthropic XML format
-function formatFileAsXml(filePath: string, content: string, includeLineNumbers: boolean): string {
+export function formatFileAsXml(filePath: string, content: string, includeLineNumbers: boolean, documentIndex: number): string {
   let formattedContent = content;
   if (includeLineNumbers) {
     formattedContent = addLineNumbers(content);
   }
   
   return [
-    `<document index="${globalIndex++}">`,
+    `<document index="${documentIndex}">`,
     `<source>${filePath}</source>`,
     '<document_content>',
     formattedContent,
@@ -80,10 +78,10 @@ function formatFileAsXml(filePath: string, content: string, includeLineNumbers: 
 }
 
 // Process a single file
-function processFile(filePath: string, includeLineNumbers: boolean = true): string | null {
+export function processFile(filePath: string, includeLineNumbers: boolean = true, documentIndex: number = 1): string | null {
   try {
     const content = fs.readFileSync(filePath, 'utf8');
-    return formatFileAsXml(filePath, content, includeLineNumbers);
+    return formatFileAsXml(filePath, content, includeLineNumbers, documentIndex);
   } catch (error) {
     if (error instanceof Error) {
       console.error(`Error processing file ${filePath}: ${error.message}`);
@@ -93,12 +91,14 @@ function processFile(filePath: string, includeLineNumbers: boolean = true): stri
 }
 
 // Process a directory recursively
-function processDirectory(
+export function processDirectory(
   dirPath: string, 
   includeHidden: boolean = false,
   respectGitignore: boolean = true,
-  includeLineNumbers: boolean = true
-): string[] {
+  includeLineNumbers: boolean = true,
+  startIndex: number = 1
+): { results: string[], nextIndex: number } {
+  let currentIndex = startIndex;
   const results: string[] = [];
   
   // Get gitignore rules if needed
@@ -127,35 +127,97 @@ function processDirectory(
       continue;
     }
     
-    const result = processFile(absolutePath, includeLineNumbers);
+    const result = processFile(absolutePath, includeLineNumbers, currentIndex);
     if (result) {
       results.push(result);
+      currentIndex++;
     }
   }
   
-  return results;
+  return { results, nextIndex: currentIndex };
 }
 
 // Process a path (file or directory)
-function processPath(
+export function processPath(
   pathToProcess: string,
   includeHidden: boolean = false,
   respectGitignore: boolean = true,
-  includeLineNumbers: boolean = true
-): string[] {
-  const stat = fs.statSync(pathToProcess);
-  
-  if (stat.isFile()) {
-    const result = processFile(pathToProcess, includeLineNumbers);
-    return result ? [result] : [];
-  } else if (stat.isDirectory()) {
-    return processDirectory(pathToProcess, includeHidden, respectGitignore, includeLineNumbers);
+  includeLineNumbers: boolean = true,
+  startIndex: number = 1
+): { results: string[], nextIndex: number } {
+  try {
+    const stat = fs.statSync(pathToProcess);
+    
+    if (stat.isFile()) {
+      const result = processFile(pathToProcess, includeLineNumbers, startIndex);
+      return { 
+        results: result ? [result] : [], 
+        nextIndex: result ? startIndex + 1 : startIndex 
+      };
+    } else if (stat.isDirectory()) {
+      return processDirectory(pathToProcess, includeHidden, respectGitignore, includeLineNumbers, startIndex);
+    }
+    
+    return { results: [], nextIndex: startIndex };
+  } catch (error) {
+    console.error(`Error processing path ${pathToProcess}:`, error);
+    return { results: [], nextIndex: startIndex };
   }
-  
-  return [];
 }
 
-// Main function
+/**
+ * Packs multiple files into a single XML document
+ * @param paths Array of file or directory paths to process
+ * @param options Configuration options
+ * @returns XML string containing the packed files
+ */
+export function packFilesSync(
+  paths: string[],
+  options: {
+    includeHidden?: boolean,
+    respectGitignore?: boolean,
+    includeLineNumbers?: boolean
+  } = {}
+): string {
+  if (paths.length === 0) {
+    return "<documents></documents>";
+  }
+  
+  const {
+    includeHidden = false,
+    respectGitignore = true,
+    includeLineNumbers = true
+  } = options;
+  
+  // Process all paths
+  let results: string[] = [];
+  results.push('<documents>');
+  
+  let currentIndex = 1;
+  
+  for (const p of paths) {
+    if (!fs.existsSync(p)) {
+      console.error(`Error: Path does not exist: ${p}`);
+      continue;
+    }
+    
+    const { results: pathResults, nextIndex } = processPath(
+      p,
+      includeHidden,
+      respectGitignore,
+      includeLineNumbers,
+      currentIndex
+    );
+    
+    results = results.concat(pathResults);
+    currentIndex = nextIndex;
+  }
+  
+  results.push('</documents>');
+  return results.join('\n');
+}
+
+// Main function for CLI usage
 async function main() {
   const program = new Command();
   
@@ -175,31 +237,12 @@ async function main() {
   const options = program.opts();
   const paths: string[] = program.args;
   
-  // Reset global index
-  globalIndex = 1;
-  
-  // Process all paths
-  let results: string[] = [];
-  results.push('<documents>');
-  
-  for (const p of paths) {
-    if (!fs.existsSync(p)) {
-      console.error(`Error: Path does not exist: ${p}`);
-      process.exit(1);
-    }
-    
-    const pathResults = processPath(
-      p,
-      options.includeHidden,
-      !options.ignoreGitignore,
-      options.lineNumbers
-    );
-    
-    results = results.concat(pathResults);
-  }
-  
-  results.push('</documents>');
-  const output = results.join('\n');
+  // Process files using the packFilesSync function
+  const output = packFilesSync(paths, {
+    includeHidden: options.includeHidden,
+    respectGitignore: !options.ignoreGitignore,
+    includeLineNumbers: options.lineNumbers
+  });
   
   // Analyze token usage
   const tokenAnalysis = analyzeXmlTokens(output);
@@ -225,7 +268,10 @@ async function main() {
   }
 }
 
-main().catch(error => {
-  console.error('Error:', error);
-  process.exit(1);
-});
+// Only run the main function if this file is being executed directly
+if (require.main === module) {
+  main().catch(error => {
+    console.error('Error:', error);
+    process.exit(1);
+  });
+}

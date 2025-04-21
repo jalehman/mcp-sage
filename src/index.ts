@@ -9,33 +9,25 @@ import { z } from "zod";
 import * as fs from "fs";
 import * as path from "path";
 import { analyzeXmlTokens } from "./tokenCounter";
-import { exec } from "child_process";
-import { promisify } from "util";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import { packFilesSync } from "./pack";
 
 // Import shared functions from gemini.ts and openai.ts
 import { sendGeminiPrompt, GEMINI_TOKEN_LIMIT } from "./gemini";
 import { sendOpenAiPrompt, O3_MODEL_NAME, O3_TOKEN_LIMIT } from "./openai";
 
-const execPromise = promisify(exec);
-
-/**
- * Packs a list of file paths into a single XML string.
- * @param paths - Paths to files to include in the context
- * @returns The XML packed string
- */
 async function packFiles(paths: string[]): Promise<string> {
   if (paths.length === 0) {
     return "<documents></documents>";
   }
 
   try {
-    // Construct the command to run the pack tool
-    const pathArgs = paths.map((p) => `"${p}"`).join(" ");
-    const { stdout } = await execPromise(
-      `node ${path.join(__dirname, "pack.js")} ${pathArgs}`,
-    );
-    return stdout;
+    // Use the direct packFilesSync function instead of spawning a subprocess
+    return packFilesSync(paths, {
+      includeHidden: false,
+      respectGitignore: true,
+      includeLineNumbers: true
+    });
   } catch (error) {
     // Error will be handled by the caller who can use proper MCP notifications
     throw error;
