@@ -1,12 +1,43 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
-// Start the MCP server
-const server = spawn('node', [path.join(__dirname, '..', 'dist', 'index.js')], {
-  env: {
-    ...process.env,
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY
+// Set debugging flag for child process
+const DEBUG_API_KEYS = false; // Set to true only when debugging API key issues
+
+// Log keys for debugging (sanitized) - only when troubleshooting
+if (DEBUG_API_KEYS) {
+  if (process.env.OPENAI_API_KEY) {
+    const openaiKey = process.env.OPENAI_API_KEY;
+    console.error(`Parent process OPENAI_API_KEY: ${openaiKey.substring(0, 7)}...${openaiKey.substring(openaiKey.length - 4)}`);
   }
+
+  if (process.env.GEMINI_API_KEY) {
+    const geminiKey = process.env.GEMINI_API_KEY;
+    console.error(`Parent process GEMINI_API_KEY: ${geminiKey.substring(0, 7)}...${geminiKey.substring(geminiKey.length - 4)}`);
+  }
+}
+
+// Start the MCP server with carefully set environment
+const serverEnv = Object.assign({}, process.env);
+delete serverEnv.OPENAI_API_KEY;
+delete serverEnv.GEMINI_API_KEY;
+
+// Add API keys individually if they exist
+if (process.env.OPENAI_API_KEY) {
+  serverEnv.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+}
+
+if (process.env.GEMINI_API_KEY) {
+  serverEnv.GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+}
+
+// Set debug flag only when needed
+if (DEBUG_API_KEYS) {
+  serverEnv.DEBUG_API_KEYS = "true";
+}
+
+const server = spawn('node', [path.join(__dirname, '..', 'dist', 'index.js')], {
+  env: serverEnv
 });
 
 // Log server output
@@ -66,14 +97,14 @@ setTimeout(() => {
           
           // If it's the initialize response, send the tool call
           if (response.id === 1 && response.result) {
-            console.log('Sending second-opinion tool request...');
+            console.log('Sending sage-opinion tool request...');
             
             const toolRequest = {
               jsonrpc: "2.0",
               id: 2,
               method: "tools/call",
               params: {
-                name: "second-opinion",
+                name: "sage-opinion",
                 arguments: {
                   prompt: "Explain how the code in test/complex.js works in a concise summary",
                   paths: ["test/complex.js"]

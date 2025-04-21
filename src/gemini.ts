@@ -4,6 +4,9 @@ import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// Token limit constant for Gemini 2.5 Pro
+export const GEMINI_TOKEN_LIMIT = 1000000; // 1M token context window
+
 // Define the interface for Gemini API request
 interface GeminiRequest {
   contents: {

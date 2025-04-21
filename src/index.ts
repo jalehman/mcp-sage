@@ -13,13 +13,11 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 
-// Import shared functions from gemini.ts
-import { sendGeminiPrompt } from "./gemini";
+// Import shared functions from gemini.ts and openai.ts
+import { sendGeminiPrompt, GEMINI_TOKEN_LIMIT } from "./gemini";
+import { sendOpenAiPrompt, O3_MODEL_NAME, O3_TOKEN_LIMIT } from "./openai";
 
 const execPromise = promisify(exec);
-
-// The maximum token limit for Gemini 2.5 Pro
-const MAX_TOKEN_LIMIT = 1000000;
 
 /**
  * Packs a list of file paths into a single XML string.
@@ -63,13 +61,169 @@ ${prompt}
 }
 
 /**
- * Checks if the combined content is within the token limit.
+ * Checks if the combined content is within a given token limit.
  * @param combined - The combined prompt with context
+ * @param limit - The token limit to check against (defaults to Gemini's limit)
  * @returns Whether the content is within limits
  */
-function isWithinTokenLimit(combined: string): boolean {
+function isWithinTokenLimit(combined: string, limit: number = GEMINI_TOKEN_LIMIT): boolean {
   const tokenAnalysis = analyzeXmlTokens(combined);
-  return tokenAnalysis.totalTokens <= MAX_TOKEN_LIMIT;
+  return tokenAnalysis.totalTokens <= limit;
+}
+
+/**
+ * Determines which model to use based on token count and available API keys.
+ * @param combined - The combined prompt with context
+ * @returns Object with model info and token count
+ */
+function selectModelBasedOnTokens(combined: string): { 
+  modelName: string; 
+  modelType: 'openai' | 'gemini';
+  tokenCount: number; 
+  withinLimit: boolean;
+  tokenLimit: number;
+} {
+  const tokenAnalysis = analyzeXmlTokens(combined);
+  const tokenCount = tokenAnalysis.totalTokens;
+  const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
+  const hasGeminiKey = !!process.env.GEMINI_API_KEY;
+  
+  // Use O3 for smaller contexts (under 200k tokens) if OpenAI API key is available
+  if (tokenCount <= O3_TOKEN_LIMIT && hasOpenAiKey) {
+    return {
+      modelName: O3_MODEL_NAME,
+      modelType: 'openai',
+      tokenCount,
+      withinLimit: true,
+      tokenLimit: O3_TOKEN_LIMIT
+    };
+  }
+  
+  // Fallback to Gemini for all sizes within its limit if Gemini API key is available
+  if (tokenCount <= GEMINI_TOKEN_LIMIT && hasGeminiKey) {
+    return {
+      modelName: 'gemini-2.5-pro-preview-03-25',
+      modelType: 'gemini',
+      tokenCount,
+      withinLimit: true,
+      tokenLimit: GEMINI_TOKEN_LIMIT
+    };
+  }
+  
+  // Determine the appropriate error response based on available keys and token count
+  if (!hasOpenAiKey && !hasGeminiKey) {
+    // No API keys available
+    return {
+      modelName: 'none',
+      modelType: 'gemini', // Default for error handling
+      tokenCount,
+      withinLimit: false,
+      tokenLimit: 0,
+    };
+  } else if (!hasOpenAiKey && tokenCount <= O3_TOKEN_LIMIT) {
+    // Missing OpenAI key for small context
+    return {
+      modelName: 'none',
+      modelType: 'openai',
+      tokenCount,
+      withinLimit: false,
+      tokenLimit: O3_TOKEN_LIMIT
+    };
+  } else if (!hasGeminiKey && tokenCount > O3_TOKEN_LIMIT) {
+    // Missing Gemini key for large context
+    return {
+      modelName: 'none',
+      modelType: 'gemini',
+      tokenCount,
+      withinLimit: false,
+      tokenLimit: GEMINI_TOKEN_LIMIT
+    };
+  }
+  
+  // Beyond all limits
+  return {
+    modelName: 'none',
+    modelType: 'gemini', // Default for error handling
+    tokenCount,
+    withinLimit: false,
+    tokenLimit: GEMINI_TOKEN_LIMIT
+  };
+}
+
+/**
+ * Sends a prompt to the appropriate model with fallback capabilities
+ * @param combined - The combined prompt with context
+ * @param modelSelection - The model selection information
+ * @param sendNotification - Function to send notifications
+ * @returns The model's response
+ */
+async function sendToModelWithFallback(
+  combined: string, 
+  modelSelection: { 
+    modelName: string; 
+    modelType: 'openai' | 'gemini';
+    tokenCount: number;
+  },
+  sendNotification: (notification: any) => Promise<void>
+): Promise<string> {
+  const { modelName, modelType, tokenCount } = modelSelection;
+  
+  try {
+    if (modelType === 'openai') {
+      await sendNotification({
+        method: "notifications/message",
+        params: {
+          level: "info",
+          data: `Sending request to OpenAI ${modelName} with ${tokenCount.toLocaleString()} tokens...`,
+        },
+      });
+      
+      return await sendOpenAiPrompt(combined, { model: modelName });
+    } else {
+      // modelType is 'gemini'
+      await sendNotification({
+        method: "notifications/message",
+        params: {
+          level: "info",
+          data: `Sending request to Gemini with ${tokenCount.toLocaleString()} tokens...`,
+        },
+      });
+      
+      return await sendGeminiPrompt(combined);
+    }
+  } catch (error) {
+    // Handle network errors from OpenAI specifically to try Gemini as fallback
+    if (
+      modelType === 'openai' && 
+      process.env.GEMINI_API_KEY && 
+      tokenCount <= GEMINI_TOKEN_LIMIT &&
+      error instanceof Error && 
+      error.message.includes('OpenAI API unreachable')
+    ) {
+      // Log the fallback attempt
+      await sendNotification({
+        method: "notifications/message",
+        params: {
+          level: "warning",
+          data: `OpenAI API unreachable. Falling back to Gemini...`,
+        },
+      });
+      
+      // Try using Gemini instead
+      await sendNotification({
+        method: "notifications/message",
+        params: {
+          level: "info",
+          data: `Sending request to Gemini with ${tokenCount.toLocaleString()} tokens...`,
+        },
+      });
+      
+      return await sendGeminiPrompt(combined);
+    } else {
+      // Re-throw other errors to be handled by the caller
+      throw error;
+    }
+  }
 }
 
 /**
@@ -115,15 +269,16 @@ function createServer(): McpServer {
         // Combine with the prompt
         const combined = combinePromptWithContext(packedFiles, prompt);
 
-        // Check token limit and get token count
-        const tokenAnalysis = analyzeXmlTokens(combined);
+        // Select model based on token count and get token information
+        const modelSelection = selectModelBasedOnTokens(combined);
+        const { modelName, modelType, tokenCount, withinLimit, tokenLimit } = modelSelection;
 
         // Log token usage via MCP logging notification
         await sendNotification({
           method: "notifications/message",
           params: {
             level: "debug",
-            data: `Token usage: ${tokenAnalysis.totalTokens.toLocaleString()} / ${MAX_TOKEN_LIMIT.toLocaleString()} tokens (${((tokenAnalysis.totalTokens / MAX_TOKEN_LIMIT) * 100).toFixed(2)}%)`,
+            data: `Token usage: ${tokenCount.toLocaleString()} tokens. Selected model: ${modelName} (limit: ${tokenLimit.toLocaleString()} tokens)`,
           },
         });
 
@@ -131,48 +286,57 @@ function createServer(): McpServer {
           method: "notifications/message",
           params: {
             level: "debug",
-            data: `Files included: ${paths.length}, Document count: ${tokenAnalysis.documentCount}`,
+            data: `Files included: ${paths.length}, Document count: ${analyzeXmlTokens(combined).documentCount}`,
           },
         });
 
-        if (tokenAnalysis.totalTokens > MAX_TOKEN_LIMIT) {
+        if (!withinLimit) {
+          // Handle different error cases
+          let errorMsg = "";
+          
+          if (modelName === 'none' && tokenLimit === 0) {
+            // No API keys available
+            errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${O3_TOKEN_LIMIT.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens.`;
+          } else if (modelType === 'openai' && !process.env.OPENAI_API_KEY) {
+            // Missing OpenAI API key
+            errorMsg = `Error: OpenAI API key not set. This content (${tokenCount.toLocaleString()} tokens) could be processed by O3, but OPENAI_API_KEY is missing. Please set the environment variable or use a smaller context.`;
+          } else if (modelType === 'gemini' && !process.env.GEMINI_API_KEY) {
+            // Missing Gemini API key
+            errorMsg = `Error: Gemini API key not set. This content (${tokenCount.toLocaleString()} tokens) requires Gemini's larger context window, but GEMINI_API_KEY is missing. Please set the environment variable.`;
+          } else {
+            // Content exceeds all available model limits
+            errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (O3: ${O3_TOKEN_LIMIT.toLocaleString()}, Gemini: ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens). Please reduce the number of files or shorten the prompt.`;
+          }
+          
           await sendNotification({
             method: "notifications/message",
             params: {
               level: "error",
-              data: `Token limit exceeded. Request blocked.`,
+              data: `Request blocked: ${process.env.OPENAI_API_KEY ? "O3 available. " : "O3 unavailable. "}${process.env.GEMINI_API_KEY ? "Gemini available." : "Gemini unavailable."}`,
             },
           });
 
           return {
-            content: [
-              {
-                type: "text",
-                text: `Error: The combined content exceeds the token limit for Gemini 2.5 Pro (1M tokens). Current usage: ${tokenAnalysis.totalTokens.toLocaleString()} tokens.`,
-              },
-            ],
+            content: [{ type: "text", text: errorMsg }],
             isError: true,
           };
         }
 
-        // Send to Gemini
-        await sendNotification({
-          method: "notifications/message",
-          params: {
-            level: "info",
-            data: `Sending request to Gemini with ${tokenAnalysis.totalTokens.toLocaleString()} tokens...`,
-          },
-        });
-
+        // Send to appropriate model based on selection with fallback capability
         const startTime = Date.now();
-        const response = await sendGeminiPrompt(combined);
+        const response = await sendToModelWithFallback(
+          combined, 
+          { modelName, modelType, tokenCount },
+          sendNotification
+        );
+
         const elapsedTime = Date.now() - startTime;
 
         await sendNotification({
           method: "notifications/message",
           params: {
             level: "info",
-            data: `Received response from Gemini in ${elapsedTime}ms`,
+            data: `Received response from ${modelName} in ${elapsedTime}ms`,
           },
         });
 
@@ -298,15 +462,16 @@ function createServer(): McpServer {
           expertReviewPrompt,
         );
 
-        // Check token limit and get token count
-        const tokenAnalysis = analyzeXmlTokens(combined);
+        // Select model based on token count and get token information
+        const modelSelection = selectModelBasedOnTokens(combined);
+        const { modelName, modelType, tokenCount, withinLimit, tokenLimit } = modelSelection;
 
         // Log token usage via MCP logging notification
         await sendNotification({
           method: "notifications/message",
           params: {
             level: "debug",
-            data: `Token usage: ${tokenAnalysis.totalTokens.toLocaleString()} / ${MAX_TOKEN_LIMIT.toLocaleString()} tokens (${((tokenAnalysis.totalTokens / MAX_TOKEN_LIMIT) * 100).toFixed(2)}%)`,
+            data: `Token usage: ${tokenCount.toLocaleString()} tokens. Selected model: ${modelName} (limit: ${tokenLimit.toLocaleString()} tokens)`,
           },
         });
 
@@ -314,48 +479,57 @@ function createServer(): McpServer {
           method: "notifications/message",
           params: {
             level: "debug",
-            data: `Files included: ${paths.length}, Document count: ${tokenAnalysis.documentCount}`,
+            data: `Files included: ${paths.length}, Document count: ${analyzeXmlTokens(combined).documentCount}`,
           },
         });
 
-        if (tokenAnalysis.totalTokens > MAX_TOKEN_LIMIT) {
+        if (!withinLimit) {
+          // Handle different error cases
+          let errorMsg = "";
+          
+          if (modelName === 'none' && tokenLimit === 0) {
+            // No API keys available
+            errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${O3_TOKEN_LIMIT.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens.`;
+          } else if (modelType === 'openai' && !process.env.OPENAI_API_KEY) {
+            // Missing OpenAI API key
+            errorMsg = `Error: OpenAI API key not set. This content (${tokenCount.toLocaleString()} tokens) could be processed by O3, but OPENAI_API_KEY is missing. Please set the environment variable or use a smaller context.`;
+          } else if (modelType === 'gemini' && !process.env.GEMINI_API_KEY) {
+            // Missing Gemini API key
+            errorMsg = `Error: Gemini API key not set. This content (${tokenCount.toLocaleString()} tokens) requires Gemini's larger context window, but GEMINI_API_KEY is missing. Please set the environment variable.`;
+          } else {
+            // Content exceeds all available model limits
+            errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (O3: ${O3_TOKEN_LIMIT.toLocaleString()}, Gemini: ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens). Please reduce the number of files or shorten the instruction.`;
+          }
+          
           await sendNotification({
             method: "notifications/message",
             params: {
               level: "error",
-              data: `Token limit exceeded. Request blocked.`,
+              data: `Request blocked: ${process.env.OPENAI_API_KEY ? "O3 available. " : "O3 unavailable. "}${process.env.GEMINI_API_KEY ? "Gemini available." : "Gemini unavailable."}`,
             },
           });
 
           return {
-            content: [
-              {
-                type: "text",
-                text: `Error: The combined content exceeds the token limit for Gemini 2.5 Pro (1M tokens). Current usage: ${tokenAnalysis.totalTokens.toLocaleString()} tokens.`,
-              },
-            ],
+            content: [{ type: "text", text: errorMsg }],
             isError: true,
           };
         }
 
-        // Send to Gemini
-        await sendNotification({
-          method: "notifications/message",
-          params: {
-            level: "info",
-            data: `Sending request to Gemini with ${tokenAnalysis.totalTokens.toLocaleString()} tokens...`,
-          },
-        });
-
+        // Send to appropriate model based on selection with fallback capability
         const startTime = Date.now();
-        const response = await sendGeminiPrompt(combined);
+        const response = await sendToModelWithFallback(
+          combined, 
+          { modelName, modelType, tokenCount },
+          sendNotification
+        );
+
         const elapsedTime = Date.now() - startTime;
 
         await sendNotification({
           method: "notifications/message",
           params: {
             level: "info",
-            data: `Received response from Gemini in ${elapsedTime}ms`,
+            data: `Received response from ${modelName} in ${elapsedTime}ms`,
           },
         });
 
@@ -401,9 +575,10 @@ async function startStdioServer() {
     const server = createServer();
     const transport = new StdioServerTransport();
     await server.connect(transport);
-
-    console.log(
-      'MCP Sage Server started with stdio transport. Use the "second-opinion" or "expert-review" tools to query Gemini with context.',
+    
+    // Use console.error for server messages since it won't interfere with stdout JSON-RPC
+    console.error(
+      'MCP Sage Server started with stdio transport. Use the "sage-opinion" or "sage-review" tools to query models with context.',
     );
   } catch (error) {
     console.error("Error starting MCP server with stdio transport:", error);
@@ -511,8 +686,9 @@ async function startHttpServer(port: number = 3000) {
 
   // Start the server
   app.listen(port, () => {
-    console.log(
-      `MCP Sage Server listening on port ${port}. Use the "second-opinion" or "expert-review" tools to query Gemini with context.`,
+    // Use console.error for server messages since it won't interfere with stdout JSON-RPC
+    console.error(
+      `MCP Sage Server listening on port ${port}. Use the "sage-opinion" or "sage-review" tools to query models with context.`,
     );
   });
 }
@@ -537,8 +713,8 @@ async function main() {
 
 // Handle server shutdown gracefully
 process.on("SIGINT", () => {
-  // Use a simple console.log here as we're shutting down and can't use MCP notifications
-  console.log("Shutting down server...");
+  // Use console.error as we're shutting down and need to avoid stdout for JSON-RPC
+  console.error("Shutting down server...");
   process.exit(0);
 });
 

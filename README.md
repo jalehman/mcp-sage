@@ -1,10 +1,29 @@
 # `mcp-sage`
 
-An MCP (Model Context Protocol) server that provides tools for sending prompts to another LLM (currently only Gemini 2.5 Pro) that embed all referenced filepaths (recursively for folders) in the prompt. Useful for getting second opinions or detailed code reviews from a model that can handle tons of context accurately.
+An MCP (Model Context Protocol) server that provides tools for sending prompts to either OpenAI's O3 model or Google's Gemini 2.5 Pro based on token count. The tools embed all referenced filepaths (recursively for folders) in the prompt. This is useful for getting second opinions or detailed code reviews from a model that can handle tons of context accurately.
 
 ## Rationale
 
-I make heavy use of Claude Code. It's a great product that works well for my workflow. Newer models with large amounts of context seem really useful though for dealing with more complex codebases where more context is needed. This lets me continue to use Claude Code as a development tool while leveraging the large context of Gemini 2.5 Pro to augment Claude Code's limited context.
+I make heavy use of Claude Code. It's a great product that works well for my workflow. Newer models with large amounts of context seem really useful though for dealing with more complex codebases where more context is needed. This lets me continue to use Claude Code as a development tool while leveraging the large context capabilities of O3 and Gemini 2.5 Pro to augment Claude Code's limited context.
+
+## Model Selection
+
+The server automatically selects the appropriate model based on token count and available API keys:
+
+- For smaller contexts (≤ 200K tokens): Uses OpenAI's O3 model (if OPENAI_API_KEY is set)
+- For larger contexts (> 200K and ≤ 1M tokens): Uses Google's Gemini 2.5 Pro (if GEMINI_API_KEY is set)
+- If the content exceeds 1M tokens: Returns an informative error
+
+Fallback behavior:
+- **API Key Fallback**:
+  - If OPENAI_API_KEY is missing, Gemini will be used for all contexts within its 1M token limit
+  - If GEMINI_API_KEY is missing, only smaller contexts (≤ 200K tokens) can be processed with O3
+  - If both API keys are missing, an informative error is returned
+
+- **Network Connectivity Fallback**:
+  - If OpenAI API is unreachable (network error), the system automatically falls back to Gemini
+  - This provides resilience against temporary network issues with one provider
+  - Requires GEMINI_API_KEY to be set for fallback to work
 
 ## Inspiration
 
@@ -17,27 +36,32 @@ This project draws inspiration from two other open source projects:
 
 This project implements an MCP server that exposes two tools:
 
-### `second-opinion`
+### `sage-opinion`
 
 1. Takes a prompt and a list of file/dir paths as input
 2. Packs the files into a structured XML format
-3. Checks if the combined content is within Gemini's token limit (1M tokens)
-4. Sends the combined prompt + context to Gemini 2.5 Pro
+3. Measures the token count and selects the appropriate model:
+   - O3 for ≤ 200K tokens
+   - Gemini 2.5 Pro for > 200K and ≤ 1M tokens
+4. Sends the combined prompt + context to the selected model
 5. Returns the model's response
 
-### `expert-review`
+### `sage-review`
 
 1. Takes an instruction for code changes and a list of file/dir paths as input
 2. Packs the files into a structured XML format
-3. Checks if the combined content is within Gemini's token limit (1M tokens)
+3. Measures the token count and selects the appropriate model:
+   - O3 for ≤ 200K tokens
+   - Gemini 2.5 Pro for > 200K and ≤ 1M tokens
 4. Creates a specialized prompt instructing the model to format responses using SEARCH/REPLACE blocks
-5. Sends the combined context + instruction to Gemini 2.5 Pro
+5. Sends the combined context + instruction to the selected model
 6. Returns edit suggestions formatted as SEARCH/REPLACE blocks for easy implementation
 
 ## Prerequisites
 
 - Node.js (v18 or later)
-- A Google Gemini API key
+- A Google Gemini API key (for larger contexts)
+- An OpenAI API key (for smaller contexts)
 
 ## Installation
 
@@ -55,17 +79,20 @@ npm run build
 
 ## Environment Variables
 
-Set the following environment variable:
+Set the following environment variables:
 
-- `GEMINI_API_KEY`: Your Google Gemini API key
+- `OPENAI_API_KEY`: Your OpenAI API key (for O3 model)
+- `GEMINI_API_KEY`: Your Google Gemini API key (for Gemini 2.5 Pro)
 
 ## Usage
 
 After building with `npm run build`, add the following to your MCP configuration:
 
 ```sh
-GEMINI_API_KEY=XXX node /path/to/this/repo/dist/index.js
+OPENAI_API_KEY=your_openai_key GEMINI_API_KEY=your_gemini_key node /path/to/this/repo/dist/index.js
 ```
+
+You can also use environment variables set elsewhere, like in your shell profile.
 
 ## Prompting
 
@@ -79,7 +106,7 @@ Both of these benefit from providing paths of files that you wnat to be included
 
 The server provides detailed monitoring information via the MCP logging capability. These logs include:
 
-- Token usage statistics (tokens used vs. token limit)
+- Token usage statistics and model selection
 - Number of files and documents included in the request
 - Request processing time metrics
 - Error information when token limits are exceeded
@@ -88,19 +115,26 @@ Logs are sent via the MCP protocol's `notifications/message` method, ensuring th
 
 Example log entries:
 ```
-Token usage: 1,234 / 1,000,000 tokens (0.12%)
+Token usage: 1,234 tokens. Selected model: o3-2025-04-16 (limit: 200,000 tokens)
 Files included: 3, Document count: 3
-Sending request to Gemini with 1,234 tokens...
-Received response from Gemini in 982ms
+Sending request to OpenAI o3-2025-04-16 with 1,234 tokens...
+Received response from o3-2025-04-16 in 982ms
+```
+
+```
+Token usage: 235,678 tokens. Selected model: gemini-2.5-pro-preview-03-25 (limit: 1,000,000 tokens)
+Files included: 25, Document count: 18
+Sending request to Gemini with 235,678 tokens...
+Received response from gemini-2.5-pro-preview-03-25 in 3240ms
 ```
 
 ### Using the Tools
 
-#### second-opinion Tool
+#### sage-opinion Tool
 
-The `second-opinion` tool accepts the following parameters:
+The `sage-opinion` tool accepts the following parameters:
 
-- `prompt` (string, required): The prompt to send to Gemini
+- `prompt` (string, required): The prompt to send to the selected model
 - `paths` (array of strings, required): List of file paths to include as context
 
 Example MCP tool call (using JSON-RPC 2.0):
@@ -111,7 +145,7 @@ Example MCP tool call (using JSON-RPC 2.0):
   "id": 1,
   "method": "tools/call",
   "params": {
-    "name": "second-opinion",
+    "name": "sage-opinion",
     "arguments": {
       "prompt": "Explain how this code works",
       "paths": ["path/to/file1.js", "path/to/file2.js"]
@@ -120,9 +154,9 @@ Example MCP tool call (using JSON-RPC 2.0):
 }
 ```
 
-#### expert-review Tool
+#### sage-review Tool
 
-The `expert-review` tool accepts the following parameters:
+The `sage-review` tool accepts the following parameters:
 
 - `instruction` (string, required): The specific changes or improvements needed
 - `paths` (array of strings, required): List of file paths to include as context
@@ -135,7 +169,7 @@ Example MCP tool call (using JSON-RPC 2.0):
   "id": 1,
   "method": "tools/call",
   "params": {
-    "name": "expert-review",
+    "name": "sage-review",
     "arguments": {
       "instruction": "Add error handling to the function",
       "paths": ["path/to/file1.js", "path/to/file2.js"]
@@ -174,11 +208,14 @@ function getData() {
 To test the tools:
 
 ```bash
-# Test the second-opinion tool
-GEMINI_API_KEY=your_api_key_here node test/run-test.js
+# Test the sage-opinion tool
+OPENAI_API_KEY=your_openai_key GEMINI_API_KEY=your_gemini_key node test/run-test.js
 
-# Test the expert-review tool
-GEMINI_API_KEY=your_api_key_here node test/test-expert.js
+# Test the sage-review tool
+OPENAI_API_KEY=your_openai_key GEMINI_API_KEY=your_gemini_key node test/test-expert.js
+
+# Test the model selection logic specifically
+OPENAI_API_KEY=your_openai_key GEMINI_API_KEY=your_gemini_key node test/test-o3.js
 ```
 
 ## Project Structure
@@ -187,8 +224,10 @@ GEMINI_API_KEY=your_api_key_here node test/test-expert.js
 - `src/pack.ts`: Tool for packing files into a structured XML format
 - `src/tokenCounter.ts`: Utilities for counting tokens in a prompt
 - `src/gemini.ts`: Gemini API client implementation
-- `test/run-test.js`: Test for the second-opinion tool
-- `test/test-expert.js`: Test for the expert-review tool
+- `src/openai.ts`: OpenAI API client implementation for O3 model
+- `test/run-test.js`: Test for the sage-opinion tool
+- `test/test-expert.js`: Test for the sage-review tool
+- `test/test-o3.js`: Test for the model selection logic
 
 ## License
 
