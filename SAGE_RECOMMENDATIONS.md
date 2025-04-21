@@ -41,9 +41,10 @@ However, there are several areas where the architecture, code organization, and 
 
 ### 2. Dependencies and API Usage
 
-- **Use Gemini SDK:**
+- ❌ **Use Gemini SDK:** (DECIDED AGAINST)
   - **Issue:** `src/gemini.ts` uses raw `fetch` calls to interact with the Google Generative AI API, while `src/openai.ts` uses the official `openai` SDK. The project already lists `@google/genai` as a dependency.
   - **Recommendation:** Refactor `src/gemini.ts` to use the `@google/genai` SDK. This provides better abstraction, potentially improved error handling, type safety, and consistency with the OpenAI client implementation.
+  - **Decision:** After evaluating the current SDK version (0.9.0), we decided against this refactoring. The SDK's API surface is not well documented, has inconsistent TypeScript type definitions, and our current implementation is working reliably. The custom implementation also gives us precise control over error handling and fallback mechanisms.
 
 - **Unused Code (`EXT_TO_LANG`):** The `EXT_TO_LANG` map in `src/pack.ts` is defined but doesn't appear to be used in the provided code to add language hints (like `<document language="typescript">`). Either utilize this map to add language information to the XML output (which could potentially help the LLM) or remove it if unused.
 
