@@ -13,8 +13,13 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { packFilesSync } from "./pack";
 
 // Import shared functions from gemini.ts and openai.ts
-import { sendGeminiPrompt, GEMINI_TOKEN_LIMIT } from "./gemini";
-import { sendOpenAiPrompt, O3_MODEL_NAME, O3_TOKEN_LIMIT } from "./openai";
+import {
+  selectModelBasedOnTokens,
+  sendToModelWithFallback,
+  GEMINI_TOKEN_LIMIT,
+  O3_MODEL_NAME,
+  O3_TOKEN_LIMIT,
+} from "./modelManager";
 
 async function packFiles(paths: string[]): Promise<string> {
   if (paths.length === 0) {
@@ -61,161 +66,6 @@ ${prompt}
 function isWithinTokenLimit(combined: string, limit: number = GEMINI_TOKEN_LIMIT): boolean {
   const tokenAnalysis = analyzeXmlTokens(combined);
   return tokenAnalysis.totalTokens <= limit;
-}
-
-/**
- * Determines which model to use based on token count and available API keys.
- * @param combined - The combined prompt with context
- * @returns Object with model info and token count
- */
-function selectModelBasedOnTokens(combined: string): { 
-  modelName: string; 
-  modelType: 'openai' | 'gemini';
-  tokenCount: number; 
-  withinLimit: boolean;
-  tokenLimit: number;
-} {
-  const tokenAnalysis = analyzeXmlTokens(combined);
-  const tokenCount = tokenAnalysis.totalTokens;
-  const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
-  const hasGeminiKey = !!process.env.GEMINI_API_KEY;
-  
-  // Use O3 for smaller contexts (under 200k tokens) if OpenAI API key is available
-  if (tokenCount <= O3_TOKEN_LIMIT && hasOpenAiKey) {
-    return {
-      modelName: O3_MODEL_NAME,
-      modelType: 'openai',
-      tokenCount,
-      withinLimit: true,
-      tokenLimit: O3_TOKEN_LIMIT
-    };
-  }
-  
-  // Fallback to Gemini for all sizes within its limit if Gemini API key is available
-  if (tokenCount <= GEMINI_TOKEN_LIMIT && hasGeminiKey) {
-    return {
-      modelName: 'gemini-2.5-pro-preview-03-25',
-      modelType: 'gemini',
-      tokenCount,
-      withinLimit: true,
-      tokenLimit: GEMINI_TOKEN_LIMIT
-    };
-  }
-  
-  // Determine the appropriate error response based on available keys and token count
-  if (!hasOpenAiKey && !hasGeminiKey) {
-    // No API keys available
-    return {
-      modelName: 'none',
-      modelType: 'gemini', // Default for error handling
-      tokenCount,
-      withinLimit: false,
-      tokenLimit: 0,
-    };
-  } else if (!hasOpenAiKey && tokenCount <= O3_TOKEN_LIMIT) {
-    // Missing OpenAI key for small context
-    return {
-      modelName: 'none',
-      modelType: 'openai',
-      tokenCount,
-      withinLimit: false,
-      tokenLimit: O3_TOKEN_LIMIT
-    };
-  } else if (!hasGeminiKey && tokenCount > O3_TOKEN_LIMIT) {
-    // Missing Gemini key for large context
-    return {
-      modelName: 'none',
-      modelType: 'gemini',
-      tokenCount,
-      withinLimit: false,
-      tokenLimit: GEMINI_TOKEN_LIMIT
-    };
-  }
-  
-  // Beyond all limits
-  return {
-    modelName: 'none',
-    modelType: 'gemini', // Default for error handling
-    tokenCount,
-    withinLimit: false,
-    tokenLimit: GEMINI_TOKEN_LIMIT
-  };
-}
-
-/**
- * Sends a prompt to the appropriate model with fallback capabilities
- * @param combined - The combined prompt with context
- * @param modelSelection - The model selection information
- * @param sendNotification - Function to send notifications
- * @returns The model's response
- */
-async function sendToModelWithFallback(
-  combined: string, 
-  modelSelection: { 
-    modelName: string; 
-    modelType: 'openai' | 'gemini';
-    tokenCount: number;
-  },
-  sendNotification: (notification: any) => Promise<void>
-): Promise<string> {
-  const { modelName, modelType, tokenCount } = modelSelection;
-  
-  try {
-    if (modelType === 'openai') {
-      await sendNotification({
-        method: "notifications/message",
-        params: {
-          level: "info",
-          data: `Sending request to OpenAI ${modelName} with ${tokenCount.toLocaleString()} tokens...`,
-        },
-      });
-      
-      return await sendOpenAiPrompt(combined, { model: modelName });
-    } else {
-      // modelType is 'gemini'
-      await sendNotification({
-        method: "notifications/message",
-        params: {
-          level: "info",
-          data: `Sending request to Gemini with ${tokenCount.toLocaleString()} tokens...`,
-        },
-      });
-      
-      return await sendGeminiPrompt(combined);
-    }
-  } catch (error) {
-    // Handle network errors from OpenAI specifically to try Gemini as fallback
-    if (
-      modelType === 'openai' && 
-      process.env.GEMINI_API_KEY && 
-      tokenCount <= GEMINI_TOKEN_LIMIT &&
-      error instanceof Error && 
-      error.message.includes('OpenAI API unreachable')
-    ) {
-      // Log the fallback attempt
-      await sendNotification({
-        method: "notifications/message",
-        params: {
-          level: "warning",
-          data: `OpenAI API unreachable. Falling back to Gemini...`,
-        },
-      });
-      
-      // Try using Gemini instead
-      await sendNotification({
-        method: "notifications/message",
-        params: {
-          level: "info",
-          data: `Sending request to Gemini with ${tokenCount.toLocaleString()} tokens...`,
-        },
-      });
-      
-      return await sendGeminiPrompt(combined);
-    } else {
-      // Re-throw other errors to be handled by the caller
-      throw error;
-    }
-  }
 }
 
 /**
