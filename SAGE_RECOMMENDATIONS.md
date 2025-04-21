@@ -25,7 +25,7 @@ However, there are several areas where the architecture, code organization, and 
   - **Recommendation:** Refactor `src/pack.ts` so its core packing logic (e.g., `processPath`, `processDirectory`, `processFile`, `formatFileAsXml`) can be exported as functions. Import and call these functions directly within `src/index.ts`. The CLI part of `pack.ts` (using `commander`) can be kept separate or removed if its primary purpose is now programmatic use within the server. This will simplify the code, improve performance, and make error handling more direct.
   - **Implementation:** Completed in commit 3453f35. Exported core packing functions, added a new `packFilesSync` function, and modified `index.ts` to use it directly instead of spawning a subprocess.
 
-- **Centralize Model Logic:**
+- ✅ **Centralize Model Logic:** (COMPLETED)
   - **Issue:** The logic for selecting the model (`selectModelBasedOnTokens`) and sending the request with fallback (`sendToModelWithFallback`) resides directly within `src/index.ts`. While functional, this makes `index.ts` quite large and mixes MCP server setup with core LLM interaction logic.
   - **Recommendation:** Create a new module (e.g., `src/modelManager.ts` or similar) responsible for:
     - Holding model constants (names, token limits).
@@ -33,6 +33,7 @@ However, there are several areas where the architecture, code organization, and 
     - Containing the `sendToModelWithFallback` logic (or a refactored version).
     - Potentially abstracting the `sendOpenAiPrompt` and `sendGeminiPrompt` calls behind a unified interface.
     `src/index.ts` would then call functions from this module, simplifying its own responsibilities.
+  - **Implementation:** Completed in commit 822f803. Created a new `modelManager.ts` module that centralizes all model logic and constants, simplifying `index.ts` by removing duplicated code.
 
 - **Consolidate Constants:** Model names (`O3_MODEL_NAME`, Gemini model name) and token limits (`O3_TOKEN_LIMIT`, `GEMINI_TOKEN_LIMIT`) are defined across `openai.ts`, `gemini.ts`, and `index.ts`. Centralize these in a single constants file or within the proposed `modelManager.ts` for easier management.
 
