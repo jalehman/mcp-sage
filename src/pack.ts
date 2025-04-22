@@ -7,31 +7,6 @@ import * as glob from 'glob';
 import ignore from 'ignore';
 import { analyzeXmlTokens } from './tokenCounter';
 
-// Map file extensions to language names for syntax highlighting
-export const EXT_TO_LANG: Record<string, string> = {
-  ts: 'typescript',
-  js: 'javascript',
-  jsx: 'javascript',
-  tsx: 'typescript',
-  py: 'python',
-  java: 'java',
-  c: 'c',
-  cpp: 'cpp',
-  cs: 'csharp',
-  go: 'go',
-  rs: 'rust',
-  rb: 'ruby',
-  php: 'php',
-  html: 'html',
-  css: 'css',
-  scss: 'scss',
-  md: 'markdown',
-  json: 'json',
-  yaml: 'yaml',
-  yml: 'yaml',
-  xml: 'xml',
-  sh: 'bash',
-};
 
 // Add line numbers to content
 export function addLineNumbers(content: string): string {
@@ -67,15 +42,8 @@ export function formatFileAsXml(filePath: string, content: string, includeLineNu
     formattedContent = addLineNumbers(content);
   }
   
-  // Extract file extension and look up language
-  const ext = path.extname(filePath).slice(1).toLowerCase();
-  const language = EXT_TO_LANG[ext] || '';
-  
-  // Include language attribute if available
-  const languageAttr = language ? ` language="${language}"` : '';
-  
   return [
-    `<document index="${documentIndex}"${languageAttr}>`,
+    `<document index="${documentIndex}">`,
     `<source>${filePath}</source>`,
     '<document_content>',
     formattedContent,
