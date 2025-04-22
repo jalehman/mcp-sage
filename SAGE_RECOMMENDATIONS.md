@@ -46,7 +46,9 @@ However, there are several areas where the architecture, code organization, and 
   - **Recommendation:** Refactor `src/gemini.ts` to use the `@google/genai` SDK. This provides better abstraction, potentially improved error handling, type safety, and consistency with the OpenAI client implementation.
   - **Decision:** After evaluating the current SDK version (0.9.0), we decided against this refactoring. The SDK's API surface is not well documented, has inconsistent TypeScript type definitions, and our current implementation is working reliably. The custom implementation also gives us precise control over error handling and fallback mechanisms.
 
-- **Unused Code (`EXT_TO_LANG`):** The `EXT_TO_LANG` map in `src/pack.ts` is defined but doesn't appear to be used in the provided code to add language hints (like `<document language="typescript">`). Either utilize this map to add language information to the XML output (which could potentially help the LLM) or remove it if unused.
+- ✅ **Unused Code (`EXT_TO_LANG`):** (COMPLETED)
+  - **Issue:** The `EXT_TO_LANG` map in `src/pack.ts` is defined but doesn't appear to be used in the provided code to add language hints (like `<document language="typescript">`). Either utilize this map to add language information to the XML output (which could potentially help the LLM) or remove it if unused.
+  - **Implementation:** Updated `formatFileAsXml` function to extract the file extension, look up the corresponding language in `EXT_TO_LANG`, and add a `language` attribute to the document element when available. This provides syntax hints to the LLM, which may improve its ability to understand and reason about code in different languages.
 
 ### 3. Testing Strategy
 

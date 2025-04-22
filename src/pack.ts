@@ -67,8 +67,15 @@ export function formatFileAsXml(filePath: string, content: string, includeLineNu
     formattedContent = addLineNumbers(content);
   }
   
+  // Extract file extension and look up language
+  const ext = path.extname(filePath).slice(1).toLowerCase();
+  const language = EXT_TO_LANG[ext] || '';
+  
+  // Include language attribute if available
+  const languageAttr = language ? ` language="${language}"` : '';
+  
   return [
-    `<document index="${documentIndex}">`,
+    `<document index="${documentIndex}"${languageAttr}>`,
     `<source>${filePath}</source>`,
     '<document_content>',
     formattedContent,
