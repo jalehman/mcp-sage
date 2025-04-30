@@ -127,6 +127,13 @@ Return only the winning plan under "# Final Implementation Plan".
 Also include a confidence score (0.0-1.0) indicating your confidence in this selection,
 in the format: "Confidence Score: X.X"
 
+EXTREMELY IMPORTANT:
+- Your final plan MUST be completely self-contained with all necessary context
+- If you reference aspects from Plan A, B, or C, you MUST fully incorporate that content
+- DO NOT make references like "Using Plan A's approach for X" without including the actual approach
+- Your plan should be readable and complete on its own, without requiring the reader to know what was in the original plans
+- Include ALL relevant details from any plan you reference
+
 IMPORTANT: Do not reveal your underlying model identity.
 `;
 }

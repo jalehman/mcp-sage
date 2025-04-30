@@ -484,10 +484,13 @@ function createServer(): McpServer {
           
           return {
             content: [
-              { type: "text", text: finalPlan },
-              { type: "text", text: `${complete ? 'Complete' : 'Partial'} Debate Transcript:\n\n${formattedLogs}` }
+              { type: "text", text: finalPlan }
             ],
-            metadata: { stats }
+            metadata: { 
+              stats,
+              complete,
+              debateRounds: logs.length > 0 ? Math.max(...logs.map(entry => entry.round)) : 0
+            }
           };
         } finally {
           clearTimeout(timeoutId);
