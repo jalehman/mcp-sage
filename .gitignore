@@ -5,6 +5,7 @@ node_modules/
 
 # builds
 dist/
+notes/
 
 # logs
 npm-debug.log*

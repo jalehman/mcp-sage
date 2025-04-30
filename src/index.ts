@@ -21,6 +21,9 @@ import {
   O3_TOKEN_LIMIT,
 } from "./modelManager";
 
+// Import debate orchestrator for sage-plan
+import { debate } from "./debateOrchestrator";
+
 async function packFiles(paths: string[]): Promise<string> {
   if (paths.length === 0) {
     return "<documents></documents>";
@@ -406,6 +409,107 @@ function createServer(): McpServer {
     },
   );
 
+  // Add the sage-plan tool for generating implementation plans via multi-model debate
+  server.tool(
+    "sage-plan",
+    `Generate an implementation plan via multi-model debate.
+    
+    This tool leverages multiple AI models to debate, critique, and refine implementation plans.
+    
+    Models will generate initial plans, critique each other's work, refine their plans based on critiques,
+    and finally produce a consensus plan that combines the best ideas.
+    
+    The process creates detailed, well-thought-out implementation plans that benefit from
+    diverse model perspectives and iterative refinement.`,
+    {
+      prompt: z.string().describe("The task to create an implementation plan for"),
+      paths: z.array(z.string()).describe("Paths to include as context. Including directories will include all files contained within recursively."),
+      rounds: z.number().optional().describe("Number of debate rounds (default: 3)"),
+      maxTokens: z.number().optional().describe("Maximum token budget for the debate"),
+    },
+    async ({ prompt, paths, rounds, maxTokens }, { sendNotification }) => {
+      try {
+        // Pack files once to reduce memory usage
+        const packedFiles = await packFiles(paths);
+        const combined = combinePromptWithContext(packedFiles, "");
+        
+        // Analyze token usage
+        const tokenAnalysis = analyzeXmlTokens(combined);
+        await sendNotification({
+          method: "notifications/message",
+          params: {
+            level: "debug",
+            data: `Code context token usage: ${tokenAnalysis.totalTokens.toLocaleString()} tokens, ${tokenAnalysis.documentCount} files included`,
+          },
+        });
+        
+        // Create abort controller for timeout handling
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => {
+          abortController.abort('Debate timeout exceeded');
+        }, 10 * 60 * 1000); // 10 minute default timeout
+        
+        try {
+          // Use debate orchestrator
+          const { finalPlan, logs, stats, complete } = await debate(
+            { 
+              paths, 
+              userPrompt: prompt, 
+              codeContext: combined,
+              rounds,
+              maxTotalTokens: maxTokens,
+              abortSignal: abortController.signal 
+            },
+            // Forward notifications
+            async (notification) => {
+              await sendNotification({
+                method: "notifications/message",
+                params: notification
+              });
+            }
+          );
+          
+          // Format logs for readable output
+          const formattedLogs = logs.map(entry => 
+            `## Round ${entry.round} | ${entry.phase} | Model ${entry.modelId}\n\n${entry.response}\n\n`
+          ).join('\n---\n\n');
+          
+          await sendNotification({
+            method: "notifications/message",
+            params: {
+              level: "info",
+              data: `Debate completed successfully. Total tokens: ${stats.totalTokens.toLocaleString()}, Total API calls: ${stats.totalApiCalls}`,
+            },
+          });
+          
+          return {
+            content: [
+              { type: "text", text: finalPlan },
+              { type: "text", text: `${complete ? 'Complete' : 'Partial'} Debate Transcript:\n\n${formattedLogs}` }
+            ],
+            metadata: { stats }
+          };
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        await sendNotification({
+          method: "notifications/message",
+          params: {
+            level: "error",
+            data: `Error in sage-plan tool: ${errorMsg}`,
+          },
+        });
+        
+        return {
+          content: [{ type: "text", text: `Error: ${errorMsg}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
   return server;
 }
 
@@ -420,7 +524,7 @@ async function startStdioServer() {
     
     // Use console.error for server messages since it won't interfere with stdout JSON-RPC
     console.error(
-      'MCP Sage Server started with stdio transport. Use the "sage-opinion" or "sage-review" tools to query models with context.',
+      'MCP Sage Server started with stdio transport. Available tools: "sage-opinion", "sage-review", and "sage-plan".',
     );
   } catch (error) {
     console.error("Error starting MCP server with stdio transport:", error);
@@ -530,7 +634,7 @@ async function startHttpServer(port: number = 3000) {
   app.listen(port, () => {
     // Use console.error for server messages since it won't interfere with stdout JSON-RPC
     console.error(
-      `MCP Sage Server listening on port ${port}. Use the "sage-opinion" or "sage-review" tools to query models with context.`,
+      `MCP Sage Server listening on port ${port}. Available tools: "sage-opinion", "sage-review", and "sage-plan".`,
     );
   });
 }
