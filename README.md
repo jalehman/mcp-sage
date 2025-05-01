@@ -72,55 +72,84 @@ Instead it orchestrates a structured **debate** that runs for one or more rounds
 --------------------------------------------------------------------
 #### 1. Multi-Model Debate Flow
 ```mermaid
-flowchart LR
-  %% ─────────────────────────  ROUND 1  ─────────────────────────
-  A1[Round 1 – Generation] --> A2[Critique]
+flowchart TD
+  S0[Start Debate] -->|determine models, judge, budgets| R1GEN
 
-  subgraph Loop["Round 2 to N"]
-    direction LR
-    B1["Synthesis Phase"] --> B2["Consensus Check"]
-    B2 -->|Reached| F["To Judgment"]
-    B2 -->|Not reached| B3["Critique Phase"] --> B1
+  subgraph "Round 1  -  Generation & Critique"
+    direction TB
+    R1GEN["Generation Phase<br/>*ALL models run in parallel*"]
+    R1GEN --> R1CRIT["Critique Phase<br/>*ALL models critique others in parallel*"]
   end
+  R1CRIT --> LOOPCHK
 
-  F --> J["Judgment Phase"]
-  J --> G["Final Plan"]
+  subgraph "Round 2 to N"
+    direction TB
+    SYNTH["Synthesis Phase<br/>*every model refines own plan*"]
+    SYNTH --> CONS[Consensus Check]
+    CONS -->|Consensus reached| JUDGE
+    CONS -->|No consensus & round < N| CRIT["Critique Phase<br/>*models critique in parallel*"]
+    CRIT --> SYNTH
+  end
+  LOOPCHK --> SYNTH
 
-  style G fill:#D0F0D7,stroke:#2F855A,stroke-width:2px
-  style J fill:#E8E8FF,stroke:#555,stroke-width:1px
+  JUDGE[Judgment Phase<br/>*judge model selects/merges plan*]
+  JUDGE --> FP[Final Plan]
+
+  classDef round fill:#e2eafe,stroke:#4169E1;
+  class R1GEN,R1CRIT,SYNTH,CRIT round;
+  style FP fill:#D0F0D7,stroke:#2F855A,stroke-width:2px
+  style JUDGE fill:#E8E8FF,stroke:#555,stroke-width:1px
 ```
 
-* **Round 1 (Generation)** - Every available model (A, B, C, etc.) writes its own "Implementation Plan"
-* **Round 1 (Critique)** - Each model receives the other plans (never its own) and produces structured critiques
+Key phases in the multi-model debate:
 
-For **Rounds 2 to N** (N defaults to 3):
-1. **Synthesis** - Each model improves its previous plan using the critiques it received
-2. **Consensus Check** - The judge model scores similarity of the current plans
-   * If score >= 0.9, the debate stops early and jumps to **Judgment**
-3. **Critique** - If consensus is not reached **and we are not in the last round**, each model critiques the others again, then the loop repeats
+**Setup Phase**
+- The system determines available models, selects a judge, and allocates token budgets
 
-**Judgment Phase** - After the last round or an early consensus, the judge model (O3 by default) receives all remaining plans and:
-- Picks the single best plan OR
-- Merges them into a superior plan
-It also returns a **confidence score**.
+**Round 1**
+- **Generation Phase** - Every available model (A, B, C, etc.) writes its own implementation plan in parallel
+- **Critique Phase** - Each model reviews all other plans (never its own) and produces structured critiques in parallel
+
+**Rounds 2 to N** (N defaults to 3)
+1. **Synthesis Phase** - Each model improves its previous plan using critiques it received (models work in parallel)
+2. **Consensus Check** - The judge model scores similarity between all current plans
+   - If score ≥ 0.9, the debate stops early and jumps to Judgment
+3. **Critique Phase** - If consensus is not reached AND we're not in the final round, each model critiques all other plans again (in parallel)
+
+**Judgment Phase**
+- After completing all rounds (or reaching early consensus), the judge model (O3 by default):
+  - Selects the single best plan OR merges multiple plans into a superior one
+  - Provides a confidence score for its selection/synthesis
 
 --------------------------------------------------------------------
 #### 2. Self-Debate Flow - Single Model Available
 ```mermaid
 flowchart TD
-  C1[Generate Plan 1] --> C2[Generate Plan 2] --> C3[Generate Plan 3]
-  C3 --> R2[Round 2 – Self-Refinement]
-  R2 --> R3[Round 3 – Self-Refinement]
-  R3 --> FCoRT[Final Plan - best of all]
+  SD0[Start Self-Debate] --> P1[Generate Plan 1]
+  P1 --> P2[Generate Plan 2<br/>*different approach*]
+  P2 --> P3[Generate Plan 3<br/>*different approach*]
 
-  style FCoRT fill:#D0F0D7,stroke:#2F855A,stroke-width:2px
+  P3 --> SUBLOOP
+  subgraph "Refinement Rounds 2 to N"
+    direction TB
+    REF[Generate Improved Plan<br/>*addresses weaknesses*]
+    DEC{More refinement rounds left?}
+    REF --> DEC
+    DEC -->|Yes| REF
+  end
+  DEC -->|No| FP[Final Plan = last plan generated]
+
+  style FP fill:#D0F0D7,stroke:#2F855A,stroke-width:2px
 ```
 
-When only one model is available:
+When only one model is available, a Chain of Recursive Thoughts (CoRT) approach is used:
 
-1. **Initial Burst** - The model writes three distinct plans (diverse approaches)
-2. **Self-Refinement Rounds (2 to N)** - The model reviews its earlier plans, critiques them internally, then produces an improved version each round
-3. **Final Selection** - The last revision becomes the final implementation plan
+1. **Initial Burst** - The model generates three distinct plans, each taking a different approach
+2. **Refinement Rounds** - For each subsequent round (2 to N, default N=3):
+   - The model reviews all previous plans
+   - It critiques them internally, identifying strengths and weaknesses
+   - It produces one new improved plan that addresses limitations in earlier plans
+3. **Final Selection** - The last plan generated becomes the final implementation plan
 
 --------------------------------------------------------------------
 ### What Actually Happens in Code (quick reference)
