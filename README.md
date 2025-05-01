@@ -73,16 +73,15 @@ Instead it orchestrates a structured **debate** that runs for one or more rounds
 #### 1. Multi-Model Debate Flow
 ```mermaid
 flowchart TD
-  S0[Start Debate] -->|determine models, judge, budgets| R1GEN
+  S0[Start Debate] -->|determine models, judge, budgets| R1
 
-  subgraph "Round 1  -  Generation & Critique"
+  subgraph R1["Round 1"]
     direction TB
     R1GEN["Generation Phase<br/>*ALL models run in parallel*"]
     R1GEN --> R1CRIT["Critique Phase<br/>*ALL models critique others in parallel*"]
   end
-  R1CRIT --> LOOPCHK
 
-  subgraph "Round 2 to N"
+  subgraph RN["Rounds 2 to N"]
     direction TB
     SYNTH["Synthesis Phase<br/>*every model refines own plan*"]
     SYNTH --> CONS[Consensus Check]
@@ -90,8 +89,8 @@ flowchart TD
     CONS -->|No consensus & round < N| CRIT["Critique Phase<br/>*models critique in parallel*"]
     CRIT --> SYNTH
   end
-  LOOPCHK --> SYNTH
-
+  
+  R1 --> RN
   JUDGE[Judgment Phase<br/>*judge model selects/merges plan*]
   JUDGE --> FP[Final Plan]
 
@@ -125,18 +124,23 @@ Key phases in the multi-model debate:
 #### 2. Self-Debate Flow - Single Model Available
 ```mermaid
 flowchart TD
-  SD0[Start Self-Debate] --> P1[Generate Plan 1]
-  P1 --> P2[Generate Plan 2<br/>*different approach*]
-  P2 --> P3[Generate Plan 3<br/>*different approach*]
+  SD0[Start Self-Debate] --> R1
 
-  P3 --> SUBLOOP
-  subgraph "Refinement Rounds 2 to N"
+  subgraph R1["Round 1 - Initial Plans"]
     direction TB
-    REF[Generate Improved Plan<br/>*addresses weaknesses*]
-    DEC{More refinement rounds left?}
+    P1[Generate Plan 1] --> P2[Generate Plan 2<br/>*different approach*]
+    P2 --> P3[Generate Plan 3<br/>*different approach*]
+  end
+
+  subgraph RN["Rounds 2 to N"]
+    direction TB
+    REF[Generate Improved Plan<br/>*addresses weaknesses in all previous plans*]
+    DEC{More rounds left?}
     REF --> DEC
     DEC -->|Yes| REF
   end
+  
+  R1 --> RN
   DEC -->|No| FP[Final Plan = last plan generated]
 
   style FP fill:#D0F0D7,stroke:#2F855A,stroke-width:2px
