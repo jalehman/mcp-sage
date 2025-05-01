@@ -10,6 +10,8 @@ import { selectModelBasedOnTokens, O3_MODEL_NAME, O3_TOKEN_LIMIT, GEMINI_TOKEN_L
 import { sendGeminiPrompt } from "./gemini";
 import { sendOpenAiPrompt } from "./openai";
 import * as debatePrompts from "./prompts/debatePrompts";
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Type for notification function passed from MCP
 export type NotificationFn = (notification: { 
@@ -48,6 +50,7 @@ export interface DebateOptions {
   abortSignal?: AbortSignal;          // For cancellation support
   timeoutMs?: number;                 // Overall debate timeout (default: 10 minutes)
   maxTotalTokens?: number;            // Budget cap
+  outputPath?: string;                // Path to save the final plan markdown file
 }
 
 /**
@@ -908,6 +911,59 @@ export async function debate(
         
         stats.perModel[modelId].cost = cost;
         stats.totalCost += cost;
+      }
+    }
+    
+    // Save output files if outputPath is provided
+    if (opts.outputPath) {
+      try {
+        // Ensure the directory exists
+        const outputDir = path.dirname(opts.outputPath);
+        if (!fs.existsSync(outputDir)) {
+          fs.mkdirSync(outputDir, { recursive: true });
+        }
+        
+        // Write the final plan to the specified file
+        fs.writeFileSync(opts.outputPath, finalPlan, 'utf8');
+        await notify('info', `Successfully saved plan to: ${opts.outputPath}`);
+        
+        // Generate the full transcript filename by adding suffix before extension
+        const extname = path.extname(opts.outputPath);
+        const basename = path.basename(opts.outputPath, extname);
+        const dirname = path.dirname(opts.outputPath);
+        const transcriptPath = path.join(dirname, `${basename}-full-transcript${extname}`);
+        
+        // Format the full transcript with all debate details
+        const transcriptContent = [
+          `# Sage Plan Debate Full Transcript\n`,
+          `## Original Request\n\n${userPrompt}\n\n`,
+          `## Debate Statistics\n`,
+          `- Total Tokens: ${stats.totalTokens.toLocaleString()}`,
+          `- Total API Calls: ${stats.totalApiCalls}`,
+          `- Estimated Cost: $${stats.totalCost.toFixed(6)}`,
+          `- Consensus Reached: ${stats.consensus.reached ? 'Yes' : 'No'}${stats.consensus.reached ? ` (round ${stats.consensus.round})` : ''}`,
+          `- Consensus Score: ${stats.consensus.score.toFixed(2)}`,
+          `- Debate Completed: ${complete ? 'Yes' : 'No'}\n\n`,
+          `## Complete Debate Log\n\n`
+        ].join('\n');
+        
+        // Add each log entry with formatted headers and content
+        const formattedLogs = logs.map(entry => {
+          return [
+            `### Round ${entry.round} | ${entry.phase} | Model ${entry.modelId} | ${new Date(entry.timestamp).toLocaleString()}`,
+            `\n**Prompt:**\n\n\`\`\`\n${entry.prompt}\n\`\`\`\n`,
+            `\n**Response:**\n\n${entry.response}\n\n`,
+            `**Token Usage:** ${entry.tokenUsage.total.toLocaleString()} (prompt: ${entry.tokenUsage.prompt.toLocaleString()}, completion: ${entry.tokenUsage.completion.toLocaleString()})\n\n`,
+            `---\n\n`
+          ].join('');
+        }).join('');
+        
+        // Write the transcript to file
+        fs.writeFileSync(transcriptPath, transcriptContent + formattedLogs, 'utf8');
+        await notify('info', `Successfully saved full transcript to: ${transcriptPath}`);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        await notify('error', `Error saving output files: ${errorMsg}`);
       }
     }
     

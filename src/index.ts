@@ -426,14 +426,19 @@ function createServer(): McpServer {
     IMPORTANT: All paths must be absolute paths (e.g., /home/user/project/src), not relative paths.
     
     The process creates detailed, well-thought-out implementation plans that benefit from
-    diverse model perspectives and iterative refinement.`,
+    diverse model perspectives and iterative refinement.
+    
+    When the optional outputPath parameter is provided, the final plan will be saved to that file path,
+    and a complete transcript of the debate will be saved to a companion file with "-full-transcript"
+    added to the filename. This is strongly recommended for preserving the expensive results of the debate.`,
     {
       prompt: z.string().describe("The task to create an implementation plan for"),
       paths: z.array(z.string()).describe("Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively."),
       rounds: z.number().optional().describe("Number of debate rounds (default: 3)"),
       maxTokens: z.number().optional().describe("Maximum token budget for the debate"),
+      outputPath: z.string().optional().describe("Markdown file path to save the final plan. Will also save a full transcript to a '-full-transcript.md' suffixed file."),
     },
-    async ({ prompt, paths, rounds, maxTokens }, { sendNotification }) => {
+    async ({ prompt, paths, rounds, maxTokens, outputPath }, { sendNotification }) => {
       try {
         // Pack files once to reduce memory usage
         const packedFiles = await packFiles(paths);
@@ -468,6 +473,7 @@ function createServer(): McpServer {
               codeContext,
               rounds,
               maxTotalTokens: maxTokens,
+              outputPath,
               abortSignal: abortController.signal 
             },
             // Forward notifications
