@@ -73,58 +73,53 @@ Instead it orchestrates a structured **debate** that runs for one or more rounds
 #### 1. Multi-Model Debate Flow
 ```mermaid
 flowchart LR
-  %% ─────────────────────────  ROUND 1  ─────────────────────────
-  A1[Round 1 – Generation<br/>(all models)] --> A2[Critique<br/>(each model reviews others)]
+  A1["Round 1 - Generation (all models)"] --> A2["Critique (each model reviews others)"]
   
-  %% ─────────────────– BEGIN LOOP OVER ROUNDS 2 … N  ──────────────
-  subgraph Loop[Round 2 … N]
+  subgraph Loop["Round 2 to N"]
     direction LR
-    B1[Synthesis<br/>(each model refines its own plan)] --> B2[Consensus Check]
-    B2 -->|Reached| F[Go to Judgment ✨]
-    B2 -->|Not reached| B3[Critique<br/>(models critique others)] --> B1
+    B1["Synthesis (each model refines plan)"] --> B2["Consensus Check"]
+    B2 -->|Reached| F["Go to Judgment"]
+    B2 -->|Not reached| B3["Critique (models critique others)"] --> B1
   end
   
-  %% ─────────────────────────  FINAL  ────────────────────────────
-  F --> J[Judgment<br/>(judge model selects or merges best plan)]
-  J --> G[🏁 Final Implementation Plan]
+  F --> J["Judgment (select or merge plans)"]
+  J --> G["Final Implementation Plan"]
   
-  %% styling
   style G fill:#D0F0D7,stroke:#2F855A,stroke-width:2px
   style J fill:#E8E8FF,stroke:#555,stroke-width:1px
 ```
 
-• **Round 1 (Generation)** – Every available model (`A`, `B`, `C`, …) writes its own "Implementation Plan".  
-• **Round 1 (Critique)** – Each model receives the other plans (never its own) and produces structured critiques.  
+* **Round 1 (Generation)** - Every available model (A, B, C, etc.) writes its own "Implementation Plan"
+* **Round 1 (Critique)** - Each model receives the other plans (never its own) and produces structured critiques
 
-For **Rounds 2 … N** (`N` defaults to 3):
-1. **Synthesis** – Each model improves its previous plan using the critiques it received.
-2. **Consensus Check** – The judge model scores similarity of the current plans.  
-   • If score ≥ 0.9, the debate stops early and jumps to **Judgment**.  
-3. **Critique** – If consensus is not reached **and we are not in the last round**, each model critiques the others again, then the loop repeats.
+For **Rounds 2 to N** (N defaults to 3):
+1. **Synthesis** - Each model improves its previous plan using the critiques it received
+2. **Consensus Check** - The judge model scores similarity of the current plans
+   * If score >= 0.9, the debate stops early and jumps to **Judgment**
+3. **Critique** - If consensus is not reached **and we are not in the last round**, each model critiques the others again, then the loop repeats
 
-**Judgment Phase** – After the last round *or* an early consensus, the judge model (O3 by default) receives all remaining plans and:
-- Picks the single best plan **or**
-- Merges them into a superior plan.  
+**Judgment Phase** - After the last round or an early consensus, the judge model (O3 by default) receives all remaining plans and:
+- Picks the single best plan OR
+- Merges them into a superior plan
 It also returns a **confidence score**.
 
 --------------------------------------------------------------------
 #### 2. Self-Debate (CoRT) Flow – Single Model Available
 ```mermaid
 flowchart TD
-  C1[Generate Plan 1] --> C2[Generate Plan 2] --> C3[Generate Plan 3]
-  C3 --> R2[Round 2 – Self-Refinement]
-  R2 --> R3[Round 3 – Self-Refinement]
-  R3 --> FCoRT[🏁 Final Plan (best of all)]
+  C1["Generate Plan 1"] --> C2["Generate Plan 2"] --> C3["Generate Plan 3"]
+  C3 --> R2["Round 2 - Self-Refinement"]
+  R2 --> R3["Round 3 - Self-Refinement"]
+  R3 --> FCoRT["Final Plan"]
   
   style FCoRT fill:#D0F0D7,stroke:#2F855A,stroke-width:2px
 ```
 
 When only one model is available:
 
-1. **Initial Burst** – The model writes three distinct plans (diverse approaches).
-2. **Self-Refinement Rounds (2…N)** –  
-   • The model reviews its earlier plans, critiques them internally, then produces an improved version each round.  
-3. **Final Selection** – The last revision becomes the final implementation plan.
+1. **Initial Burst** - The model writes three distinct plans (diverse approaches)
+2. **Self-Refinement Rounds (2 to N)** - The model reviews its earlier plans, critiques them internally, then produces an improved version each round
+3. **Final Selection** - The last revision becomes the final implementation plan
 
 --------------------------------------------------------------------
 ### What Actually Happens in Code (quick reference)
