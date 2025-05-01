@@ -74,18 +74,18 @@ Instead it orchestrates a structured **debate** that runs for one or more rounds
 ```mermaid
 flowchart LR
   %% ─────────────────────────  ROUND 1  ─────────────────────────
-  A1[Round 1 – Generation<br/>(all models)] --> A2[Critique<br/>(each model reviews others)]
+  A1[Round 1 – Generation] --> A2[Critique]
   
   %% ─────────────────– BEGIN LOOP OVER ROUNDS 2 … N  ──────────────
   subgraph Loop[Round 2 … N]
     direction LR
-    B1[Synthesis<br/>(each model refines its own plan)] --> B2[Consensus Check]
+    B1[Synthesis<br/>each model refines its own plan] --> B2[Consensus Check]
     B2 -->|Reached| F[Go to Judgment ✨]
-    B2 -->|Not reached| B3[Critique<br/>(models critique others)] --> B1
+    B2 -->|Not reached| B3[Critique<br/>models critique others] --> B1
   end
   
   %% ─────────────────────────  FINAL  ────────────────────────────
-  F --> J[Judgment<br/>(judge model selects or merges best plan)]
+  F --> J[Judgment<br/>judge model selects or merges best plan]
   J --> G[🏁 Final Implementation Plan]
   
   %% styling
