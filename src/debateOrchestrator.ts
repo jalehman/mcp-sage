@@ -46,7 +46,7 @@ export interface DebateOptions {
   parallelism?: number;               // # of concurrent calls
   judgeModel?: string | "auto";       // "auto" = o3 if available
   abortSignal?: AbortSignal;          // For cancellation support
-  timeoutMs?: number;                 // Per-round timeout
+  timeoutMs?: number;                 // Overall debate timeout (default: 10 minutes)
   maxTotalTokens?: number;            // Budget cap
 }
 
@@ -252,18 +252,32 @@ async function sendToModel(
   prompt: string,
   modelName: string,
   modelType: 'openai' | 'gemini',
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  notifyFn?: (message: {level: 'info' | 'warning' | 'error' | 'debug'; data: string}) => Promise<void>
 ): Promise<ModelResponse> {
+  // No direct console logging in MCP communication paths
   // Estimate token counts for statistics
   const estimatedPromptTokens = modelType === 'openai' 
     ? prompt.length / 4  // rough openai estimation
     : prompt.length / 5; // rough gemini estimation
   
+  // Just use the provided abort signal
+  const signal = abortSignal;
+  
   try {
     // Use the appropriate API based on model type
     if (modelType === 'openai') {
+      // Send detailed debug info
+      if (notifyFn) {
+        try {
+          await notifyFn({ level: 'debug', data: `Starting OpenAI request for ${modelName} with ${prompt.length} chars, signal active: ${signal ? !signal.aborted : 'no signal'}` });
+        } catch (e) {
+          // Ignore notification errors
+        }
+      }
+      
       const openaiResponse = await withRetry(
-        () => sendOpenAiPrompt(prompt, { model: modelName }),
+        () => sendOpenAiPrompt(prompt, { model: modelName }, notifyFn, signal), // No longer passing timeout
         { attempts: 3 }
       );
       
@@ -280,8 +294,17 @@ async function sendToModel(
       };
     } else {
       // Gemini
+      // Send detailed debug info
+      if (notifyFn) {
+        try {
+          await notifyFn({ level: 'debug', data: `Starting Gemini request for ${modelName} with ${prompt.length} chars, signal active: ${signal ? !signal.aborted : 'no signal'}` });
+        } catch (e) {
+          // Ignore notification errors
+        }
+      }
+      
       const geminiResponse = await withRetry(
-        () => sendGeminiPrompt(prompt, { model: modelName }),
+        () => sendGeminiPrompt(prompt, { model: modelName }, signal),
         { attempts: 3 }
       );
       
@@ -298,8 +321,50 @@ async function sendToModel(
       };
     }
   } catch (error) {
+    // Log detailed error info including rate limits
+    const errorObj = error as any;
+    
+    // Add abort-specific logging
+    if ((error as Error).name === 'AbortError' || (error instanceof Error && error.message.includes('abort'))) {
+      throw new Error(`Timeout exceeded for ${modelType} API call (${modelName}): ${error instanceof Error ? error.message : String(error)}`);
+    }
+    
+    if (errorObj.status === 429 && errorObj.error?.type === 'tokens') {
+      // Handle rate limit errors specifically
+      const resetTokens = errorObj.headers?.['x-ratelimit-reset-tokens'] || 'unknown';
+      const waitTime = errorObj.headers?.['x-ratelimit-reset-tokens'] ? 
+        parseResetTime(errorObj.headers['x-ratelimit-reset-tokens']) : 60000;
+      
+      // Log rate limit details
+      console.warn(`Rate limit exceeded calling ${modelType} API (${modelName}): Reset in ${waitTime}ms`);
+      
+      throw new Error(`Rate limit exceeded calling ${modelType} API (${modelName}): ${errorObj.error?.message || 'Unknown error'}. Reset in: ${resetTokens}, Requested: ${errorObj.error?.param || 'unknown'}`);
+    }
+    
+    // No direct console logging for MCP communication paths
+    
     throw new Error(`Error calling ${modelType} API (${modelName}): ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+// Helper to parse reset time from headers
+function parseResetTime(resetHeader: string): number {
+  let totalMs = 0;
+  
+  // Check for minutes (e.g. "1m20s")
+  const minutesMatch = resetHeader.match(/(\d+)m/);
+  if (minutesMatch) {
+    totalMs += parseInt(minutesMatch[1], 10) * 60 * 1000;
+  }
+  
+  // Check for seconds (e.g. "30s" or "1m30s")
+  const secondsMatch = resetHeader.match(/(\d+)s/);
+  if (secondsMatch) {
+    totalMs += parseInt(secondsMatch[1], 10) * 1000;
+  }
+  
+  // If no time format recognized, default to 60 seconds
+  return totalMs === 0 ? 60000 : totalMs;
 }
 
 /**
@@ -320,11 +385,12 @@ async function checkConsensus(
   plans: Record<string, string>,
   judgeModel: string,
   judgeModelType: 'openai' | 'gemini',
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  notifyFn?: NotificationFn
 ): Promise<{ reached: boolean; score: number; }> {
   try {
     const consensusPrompt = debatePrompts.consensusCheckPrompt(plans);
-    const response = await sendToModel(consensusPrompt, judgeModel, judgeModelType, abortSignal);
+    const response = await sendToModel(consensusPrompt, judgeModel, judgeModelType, abortSignal, notifyFn);
     
     try {
       // Extract JSON from response
@@ -397,9 +463,24 @@ export async function debate(
   // Track whether the debate completes all rounds
   let complete = false;
   
+  // Create our own abort controller if none was provided, and create one per request for timeouts
+  let localAbortController: AbortController | null = null;
+  let debateSignal = abortSignal;
+  if (!debateSignal) {
+    localAbortController = new AbortController();
+    debateSignal = localAbortController.signal;
+  }
+  
+  // We no longer use per-request timeout controllers
+  // Only the main debate timeout is used
+  
   // Create a promise that rejects after timeout
   const timeoutPromise = new Promise<never>((_resolve, reject) => {
     const timeoutId = setTimeout(() => {
+      // Abort any running API calls 
+      if (localAbortController) {
+        localAbortController.abort();
+      }
       reject(new Error(`Debate timeout exceeded (${timeoutMs}ms)`));
     }, timeoutMs);
     
@@ -443,6 +524,7 @@ export async function debate(
     };
     
     await notify('info', 'Starting debate orchestration...');
+    await notify('debug', `Using overall timeout: ${timeoutMs/1000}s`);
     
     // Step 1: Determine available models
     const availableModels = getAvailableModels().filter(m => m.available);
@@ -458,7 +540,7 @@ export async function debate(
     const modelMapping = createModelMapping(debateModels);
     const { idToModel, modelToId } = modelMapping;
     
-    await notify('info', `Debate participants: ${Object.entries(idToModel).map(([id, model]) => `Model ${id}`).join(', ')}`);
+    await notify('info', `Debate participants: ${Object.entries(idToModel).map(([id, model]) => `Model ${id} (${model})`).join(', ')}`);
     
     // Step 3: Select judge model (default to o3 if available)
     let judgeModelName = '';
@@ -514,7 +596,7 @@ export async function debate(
           await notify('info', `Generating plan ${i+1} in self-debate...`);
           
           const response = await Promise.race([
-            sendToModel(codeContext + selfPrompt, modelName, modelType, abortSignal),
+            sendToModel(codeContext + selfPrompt, modelName, modelType, debateSignal, sendNotification),
             timeoutPromise
           ]);
           
@@ -543,7 +625,7 @@ export async function debate(
           await notify('info', `Self-debate round ${round}...`);
           
           const response = await Promise.race([
-            sendToModel(selfPrompt, modelName, modelType, abortSignal),
+            sendToModel(selfPrompt, modelName, modelType, debateSignal, sendNotification),
             timeoutPromise
           ]);
           
@@ -593,8 +675,10 @@ export async function debate(
                 const generationPrompt = debatePrompts.generatePrompt(modelId, userPrompt);
                 
                 try {
+                  await notify('info', `Sending generation request to model ${modelId} (${modelName})...`);
+                  
                   const response = await Promise.race([
-                    sendToModel(codeContext + generationPrompt, modelName, modelType, abortSignal),
+                    sendToModel(codeContext + generationPrompt, modelName, modelType, debateSignal, sendNotification),
                     timeoutPromise
                   ]);
                   
@@ -610,9 +694,9 @@ export async function debate(
                   // Store the plan
                   currentPlans[modelId] = response.text;
                   
-                  await notify('debug', `Model ${modelId} generated plan successfully.`);
+                  await notify('debug', `Model ${modelId} (${modelName}) generated plan successfully.`);
                 } catch (error) {
-                  await notify('error', `Error in generation phase for model ${modelId}: ${error instanceof Error ? error.message : String(error)}`);
+                  await notify('error', `Error in generation phase for model ${modelId} (${modelName}): ${error instanceof Error ? error.message : String(error)}`);
                 }
               };
             });
@@ -645,7 +729,7 @@ export async function debate(
                 
                 try {
                   const response = await Promise.race([
-                    sendToModel(synthesisPrompt, modelName, modelType, abortSignal),
+                    sendToModel(synthesisPrompt, modelName, modelType, debateSignal, sendNotification),
                     timeoutPromise
                   ]);
                   
@@ -661,9 +745,9 @@ export async function debate(
                   // Update the plan
                   currentPlans[modelId] = response.text;
                   
-                  await notify('debug', `Model ${modelId} refined plan successfully.`);
+                  await notify('debug', `Model ${modelId} (${modelName}) refined plan successfully.`);
                 } catch (error) {
-                  await notify('error', `Error in synthesis phase for model ${modelId}: ${error instanceof Error ? error.message : String(error)}`);
+                  await notify('error', `Error in synthesis phase for model ${modelId} (${modelName}): ${error instanceof Error ? error.message : String(error)}`);
                 }
               };
             });
@@ -723,7 +807,7 @@ export async function debate(
               
               try {
                 const response = await Promise.race([
-                  sendToModel(critiquePrompt, modelName, modelType, abortSignal),
+                  sendToModel(critiquePrompt, modelName, modelType, debateSignal, sendNotification),
                   timeoutPromise
                 ]);
                 
@@ -736,9 +820,9 @@ export async function debate(
                   tokenUsage: response.tokenUsage
                 });
                 
-                await notify('debug', `Model ${modelId} critiqued other plans successfully.`);
+                await notify('debug', `Model ${modelId} (${modelName}) critiqued other plans successfully.`);
               } catch (error) {
-                await notify('error', `Error in critique phase for model ${modelId}: ${error instanceof Error ? error.message : String(error)}`);
+                await notify('error', `Error in critique phase for model ${modelId} (${modelName}): ${error instanceof Error ? error.message : String(error)}`);
               }
             };
           });
@@ -765,7 +849,7 @@ export async function debate(
           
           try {
             const response = await Promise.race([
-              sendToModel(judgePrompt, judgeModelName, judgeModelType, abortSignal),
+              sendToModel(judgePrompt, judgeModelName, judgeModelType, debateSignal, sendNotification),
               timeoutPromise
             ]);
             
