@@ -65,7 +65,7 @@ This project implements an MCP server that exposes three tools:
 4. Models critique and refine each other's plans through multiple rounds
 5. Returns the winning implementation plan with detailed steps
 
-### 🧠 sage-plan — Multi-Model & Self-Debate Workflows
+### sage-plan - Multi-Model & Self-Debate Workflows
 The `sage-plan` tool doesn't ask a single model for a plan.  
 Instead it orchestrates a structured **debate** that runs for one or more rounds and then asks a separate judge model (or the same model in CoRT mode) to pick the winner.
 
@@ -73,17 +73,17 @@ Instead it orchestrates a structured **debate** that runs for one or more rounds
 #### 1. Multi-Model Debate Flow
 ```mermaid
 flowchart LR
-  A1["Round 1 - Generation (all models)"] --> A2["Critique (each model reviews others)"]
+  A1["Round 1 - Generation"] --> A2["Critique Phase"]
   
   subgraph Loop["Round 2 to N"]
     direction LR
-    B1["Synthesis (each model refines plan)"] --> B2["Consensus Check"]
-    B2 -->|Reached| F["Go to Judgment"]
-    B2 -->|Not reached| B3["Critique (models critique others)"] --> B1
+    B1["Synthesis Phase"] --> B2["Consensus Check"]
+    B2 -->|Reached| F["To Judgment"]
+    B2 -->|Not reached| B3["Critique Phase"] --> B1
   end
   
-  F --> J["Judgment (select or merge plans)"]
-  J --> G["Final Implementation Plan"]
+  F --> J["Judgment Phase"]
+  J --> G["Final Plan"]
   
   style G fill:#D0F0D7,stroke:#2F855A,stroke-width:2px
   style J fill:#E8E8FF,stroke:#555,stroke-width:1px
@@ -104,12 +104,12 @@ For **Rounds 2 to N** (N defaults to 3):
 It also returns a **confidence score**.
 
 --------------------------------------------------------------------
-#### 2. Self-Debate (CoRT) Flow – Single Model Available
+#### 2. Self-Debate Flow - Single Model Available
 ```mermaid
 flowchart TD
   C1["Generate Plan 1"] --> C2["Generate Plan 2"] --> C3["Generate Plan 3"]
-  C3 --> R2["Round 2 - Self-Refinement"]
-  R2 --> R3["Round 3 - Self-Refinement"]
+  C3 --> R2["Round 2 Refinement"]
+  R2 --> R3["Round 3 Refinement"]
   R3 --> FCoRT["Final Plan"]
   
   style FCoRT fill:#D0F0D7,stroke:#2F855A,stroke-width:2px
