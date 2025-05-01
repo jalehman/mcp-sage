@@ -6,7 +6,14 @@
  */
 
 import { analyzeXmlTokens } from "./tokenCounter";
-import { selectModelBasedOnTokens, O3_MODEL_NAME, O3_TOKEN_LIMIT, GEMINI_TOKEN_LIMIT } from "./modelManager";
+import { 
+  selectModelBasedOnTokens, 
+  getAvailableModels,
+  sendToModelWithFallback,
+  Models,
+  ModelType,
+  ModelConfig
+} from "./modelManager";
 import { sendGeminiPrompt } from "./gemini";
 import { sendOpenAiPrompt } from "./openai";
 import * as debatePrompts from "./prompts/debatePrompts";
@@ -77,17 +84,7 @@ export interface DebateResult {
   complete: boolean;                  // Whether debate completed all rounds or was partial
 }
 
-/**
- * Model capability information
- */
-export interface ModelCapability {
-  name: string;
-  type: 'openai' | 'gemini';
-  available: boolean;
-  tokenLimit: number;
-  costPerInputToken: number;
-  costPerOutputToken: number;
-}
+// Note: ModelConfig is now imported from modelManager
 
 /**
  * Options for retry helper
@@ -146,48 +143,7 @@ export async function withRetry<T>(
   throw lastError || new Error('Retry failed');
 }
 
-/**
- * Get available models with their capabilities
- */
-export function getAvailableModels(): ModelCapability[] {
-  const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
-  const hasGeminiKey = !!process.env.GEMINI_API_KEY;
-  
-  const models: ModelCapability[] = [];
-  
-  // O3 model
-  models.push({
-    name: O3_MODEL_NAME,
-    type: 'openai',
-    available: hasOpenAiKey,
-    tokenLimit: O3_TOKEN_LIMIT,
-    // Approximate costs per 1M tokens (may need to be updated)
-    costPerInputToken: 8 / 1000000,
-    costPerOutputToken: 24 / 1000000
-  });
-  
-  // GPT-4.1 model
-  models.push({
-    name: 'gpt-4.1-2025-04-14', // Full model name with date
-    type: 'openai',
-    available: hasOpenAiKey,
-    tokenLimit: 1047576, // ~1M tokens context window (exact 1,047,576)
-    costPerInputToken: 2 / 1000000, // $2.00 per 1M input tokens ($0.000002 per token)
-    costPerOutputToken: 8 / 1000000  // $8.00 per 1M output tokens ($0.000008 per token)
-  });
-  
-  // Gemini model
-  models.push({
-    name: 'gemini-2.5-pro-preview-03-25',
-    type: 'gemini',
-    available: hasGeminiKey,
-    tokenLimit: GEMINI_TOKEN_LIMIT,
-    costPerInputToken: 3.5 / 1000000,
-    costPerOutputToken: 10.5 / 1000000
-  });
-  
-  return models;
-}
+// Note: getAvailableModels is now imported from modelManager
 
 /**
  * Create a mapping between model names and anonymous IDs
@@ -551,7 +507,7 @@ export async function debate(
     
     if (judgeModel === 'auto') {
       // Find O3 if available, otherwise use the "best" available model
-      const o3Model = availableModels.find(m => m.name === O3_MODEL_NAME);
+      const o3Model = availableModels.find(m => m.name === Models.O3.name);
       if (o3Model) {
         judgeModelName = o3Model.name;
         judgeModelType = o3Model.type;

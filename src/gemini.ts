@@ -3,9 +3,7 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
-
-// Token limit constant for Gemini 2.5 Pro
-export const GEMINI_TOKEN_LIMIT = 1000000; // 1M token context window
+import { GEMINI_MODEL_NAME, GEMINI_TOKEN_LIMIT } from './modelDefinitions';
 
 // Define the interface for Gemini API request
 interface GeminiRequest {
@@ -54,7 +52,7 @@ export async function sendGeminiPrompt(
   }
 
   // Default to Gemini 2.5 Pro Preview if no model is specified
-  const model = options.model || 'gemini-2.5-pro-preview-03-25';
+  const model = options.model || GEMINI_MODEL_NAME;
   
   // Using the v1beta endpoint
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;

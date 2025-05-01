@@ -1,8 +1,5 @@
 import OpenAI from 'openai';
-
-// Model constants
-export const O3_MODEL_NAME = 'o3-2025-04-16'; // OpenAI's O3 model with 200k context
-export const O3_TOKEN_LIMIT = 200000; // 200k token context window
+import { O3_MODEL_NAME } from './modelDefinitions';
 
 /**
  * Creates a fresh OpenAI client instance for each request
