@@ -66,9 +66,18 @@ export async function sendToModelWithFallback(
   sendNotification: (n: any) => Promise<void>,
 ): Promise<string> {
   try {
+    // Helper function to adapt our notification format to what openai.ts expects
+    const notifyAdapter = async (message: {level: 'info' | 'warning' | 'error' | 'debug'; data: string}) => {
+      await sendNotification({ 
+        method: "notifications/message", 
+        params: message 
+      });
+    };
+    
     if (modelType === "openai") {
       await sendNotification({ method: "notifications/message", params: { level: "info", data: `Sending request to OpenAI ${modelName} with ${tokenCount.toLocaleString()} tokens…` } });
-      return await sendOpenAiPrompt(combined, { model: modelName });
+      // Pass the notification adapter to handle rate limit retries
+      return await sendOpenAiPrompt(combined, { model: modelName }, notifyAdapter);
     }
 
     await sendNotification({ method: "notifications/message", params: { level: "info", data: `Sending request to Gemini with ${tokenCount.toLocaleString()} tokens…` } });

@@ -431,10 +431,11 @@ function createServer(): McpServer {
       try {
         // Pack files once to reduce memory usage
         const packedFiles = await packFiles(paths);
-        const combined = combinePromptWithContext(packedFiles, "");
         
         // Analyze token usage
-        const tokenAnalysis = analyzeXmlTokens(combined);
+        const { analyzeXmlTokens } = await import("./tokenCounter");
+        const tokenAnalysis = analyzeXmlTokens(packedFiles);
+        
         await sendNotification({
           method: "notifications/message",
           params: {
@@ -442,6 +443,9 @@ function createServer(): McpServer {
             data: `Code context token usage: ${tokenAnalysis.totalTokens.toLocaleString()} tokens, ${tokenAnalysis.documentCount} files included`,
           },
         });
+        
+        // Combine code context with empty prompt - the actual prompt will be handled by the debate orchestrator
+        const codeContext = combinePromptWithContext(packedFiles, "");
         
         // Create abort controller for timeout handling
         const abortController = new AbortController();
@@ -455,7 +459,7 @@ function createServer(): McpServer {
             { 
               paths, 
               userPrompt: prompt, 
-              codeContext: combined,
+              codeContext,
               rounds,
               maxTotalTokens: maxTokens,
               abortSignal: abortController.signal 

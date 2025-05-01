@@ -42,6 +42,15 @@ function approximateTokenCount(text: string): number {
 }
 
 /**
+ * Represents a document extracted from XML
+ */
+export interface XmlDocument {
+  path: string;
+  content: string;
+  tokenCount: number;
+}
+
+/**
  * Analyzes and estimates token count for an XML document with a specific structure.
  * 
  * @param xmlContent - The XML content in Anthropic's format
@@ -52,13 +61,29 @@ export function analyzeXmlTokens(xmlContent: string, modelName: TiktokenModel = 
   totalTokens: number;
   documentCount: number;
   averageTokensPerDocument: number;
+  documents: XmlDocument[];
 } {
   // Count total tokens
   const totalTokens = countTokens(xmlContent, modelName);
   
-  // Count number of documents
-  const documentMatches = xmlContent.match(/<document index/g);
-  const documentCount = documentMatches ? documentMatches.length : 0;
+  // Extract documents
+  const documents: XmlDocument[] = [];
+  const regex = /<document(?:\s+index="\d+"|\s+path="([^"]*)")+[^>]*>([\s\S]*?)<\/document>/g;
+  
+  let match;
+  while ((match = regex.exec(xmlContent)) !== null) {
+    const path = match[1] || '';
+    const content = match[2];
+    const tokenCount = countTokens(content, modelName);
+    
+    documents.push({
+      path,
+      content,
+      tokenCount
+    });
+  }
+  
+  const documentCount = documents.length;
   
   // Calculate average tokens per document
   const averageTokensPerDocument = documentCount > 0 
@@ -68,6 +93,64 @@ export function analyzeXmlTokens(xmlContent: string, modelName: TiktokenModel = 
   return {
     totalTokens,
     documentCount,
-    averageTokensPerDocument
+    averageTokensPerDocument,
+    documents
   };
+}
+
+/**
+ * Splits XML content into multiple batches to avoid hitting token rate limits
+ * 
+ * @param xmlContent - The XML content to split
+ * @param tokenLimit - Maximum tokens per batch
+ * @param modelName - The model used for tokenization
+ * @returns Array of XML content batches
+ */
+export function splitXmlIntoBatches(
+  xmlContent: string,
+  tokenLimit: number = 25000, // Conservative limit to stay under TPM
+  modelName: TiktokenModel = 'gpt-4'
+): string[] {
+  const analysis = analyzeXmlTokens(xmlContent, modelName);
+  
+  // If under limit, return as single batch
+  if (analysis.totalTokens <= tokenLimit) {
+    return [xmlContent];
+  }
+  
+  // We need to split by documents
+  const batches: string[] = [];
+  let currentBatch = '<documents>\n';
+  let currentBatchTokens = countTokens(currentBatch, modelName);
+  const closingTagTokens = countTokens('</documents>', modelName);
+  const batchHeaderTokens = countTokens('<documents>\n<!-- CONTINUED FROM PREVIOUS BATCH -->\n', modelName);
+  
+  // For each document in the XML
+  for (const doc of analysis.documents) {
+    // Calculate the document's XML representation
+    const docXml = `<document path="${doc.path}">\n${doc.content}\n</document>\n`;
+    const docTokens = countTokens(docXml, modelName);
+    
+    // If adding this document would exceed batch limit, finalize current batch
+    if (currentBatchTokens + docTokens + closingTagTokens > tokenLimit) {
+      currentBatch += '</documents>';
+      batches.push(currentBatch);
+      
+      // Start new batch
+      currentBatch = '<documents>\n<!-- CONTINUED FROM PREVIOUS BATCH -->\n';
+      currentBatchTokens = batchHeaderTokens;
+    }
+    
+    // Add document to current batch
+    currentBatch += docXml;
+    currentBatchTokens += docTokens;
+  }
+  
+  // Add final batch if not empty
+  if (currentBatch !== '<documents>\n') {
+    currentBatch += '</documents>';
+    batches.push(currentBatch);
+  }
+  
+  return batches;
 }

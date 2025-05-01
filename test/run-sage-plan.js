@@ -31,6 +31,12 @@ if (process.env.GEMINI_API_KEY) {
   serverEnv.GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 }
 
+// For testing the batching functionality
+serverEnv.DEBUG_BATCHING = "true";
+
+// Also reduce the wait time between batches for faster testing
+serverEnv.DEBUG_BATCH_WAIT_TIME = "5000"; // 5 seconds instead of 55
+
 // Set debug flag only when needed
 if (DEBUG_API_KEYS) {
   serverEnv.DEBUG_API_KEYS = "true";
@@ -51,7 +57,11 @@ server.stderr.on('data', (data) => {
 
 // Wait a bit for server to start
 setTimeout(() => {
-  console.log('Sending initialize request...');
+  console.log('Test started, sending initialize request...');
+  console.log('Using paths:', [
+    path.join(__dirname, '..', 'src'),
+    path.join(__dirname, '..', 'test')
+  ]);
   
   // Send initialize request with all required fields
   const initializeRequest = {
@@ -107,7 +117,10 @@ setTimeout(() => {
                 name: "sage-plan",
                 arguments: {
                   prompt: "Create a robust logging system with rotation, different log levels, and a clean API",
-                  paths: ["src/", "test/test-sage.js"],
+                  paths: [
+                    path.join(__dirname, '..', 'src'),
+                    path.join(__dirname, '..', 'test')
+                  ],
                   rounds: 2 // Use fewer rounds for testing to speed it up
                 }
               }
@@ -150,10 +163,12 @@ setTimeout(() => {
             }
             
             // Exit after receiving the response
+            // Set a long timeout since our batching approach with rate limit respect
+            // might take several minutes (55 seconds between batches)
             setTimeout(() => {
               server.kill();
               process.exit(0);
-            }, 1000);
+            }, 5 * 60 * 1000); // 5 minutes
           }
         } catch (err) {
           console.error('Error parsing response:', err);

@@ -42,9 +42,12 @@ export async function sendGeminiPrompt(
     topP?: number;
     topK?: number;
     maxOutputTokens?: number;
-  } = {}
+  } = {},
+  abortSignal?: AbortSignal
 ): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
+  
+  // A hard timeout is now provided by the AbortSignal from the debateOrchestrator
   
   if (!apiKey) {
     throw new Error('GEMINI_API_KEY environment variable is not set');
@@ -95,7 +98,8 @@ export async function sendGeminiPrompt(
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      signal: abortSignal
     });
 
     if (!response.ok) {
