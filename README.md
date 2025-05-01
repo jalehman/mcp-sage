@@ -31,6 +31,7 @@ This project draws inspiration from two other open source projects:
 
 - [simonw/files-to-prompt](https://github.com/simonw/files-to-prompt) for the file compression
 - [asadm/vibemode](https://github.com/asadm/vibemode) for the idea and prompt to send the entire repo to Gemini for wholesale edit suggestions
+- [PhialsBasement/Chain-of-Recursive-Thoughts](https://github.com/PhialsBasement/Chain-of-Recursive-Thoughts) inspiration for the sage-plan tool
 
 ## Overview
 
@@ -89,7 +90,7 @@ flowchart TD
     CONS -->|No consensus & round < N| CRIT["Critique Phase<br/>*models critique in parallel*"]
     CRIT --> SYNTH
   end
-  
+
   R1 --> RN
   JUDGE[Judgment Phase<br/>*judge model selects/merges plan*]
   JUDGE --> FP[Final Plan]
@@ -139,14 +140,14 @@ flowchart TD
     REF --> DEC
     DEC -->|Yes| REF
   end
-  
+
   R1 --> RN
   DEC -->|No| FP[Final Plan = last plan generated]
 
   style FP fill:#D0F0D7,stroke:#2F855A,stroke-width:2px
 ```
 
-When only one model is available, a Chain of Recursive Thoughts (CoRT) approach is used:
+When only one model is available, a [Chain of Recursive Thoughts (CoRT)](https://github.com/PhialsBasement/Chain-of-Recursive-Thoughts) approach is used:
 
 1. **Initial Burst** - The model generates three distinct plans, each taking a different approach
 2. **Refinement Rounds** - For each subsequent round (2 to N, default N=3):
@@ -165,18 +166,18 @@ When only one model is available, a Chain of Recursive Thoughts (CoRT) approach 
 | Synthesis Prompts     | prompts/debatePrompts.synthesizePrompt | Model revises its own plan |
 | Consensus Check       | debateOrchestrator.checkConsensus    | Judge model returns JSON with `consensusScore` |
 | Judgment              | prompts/debatePrompts.judgePrompt    | Judge returns "# Final Implementation Plan" + confidence |
-| Self-Debate Prompt    | prompts/debatePrompts.selfDebatePrompt | Chain-of-Recursive-Thoughts loop |
+| Self-Debate Prompt    | prompts/debatePrompts.selfDebatePrompt | [Chain-of-Recursive-Thoughts](https://github.com/PhialsBasement/Chain-of-Recursive-Thoughts) loop |
 
 #### Performance and Cost Considerations
 
 **⚠️ Important:** The sage-plan tool can:
-- Take a significant amount of time to complete (5-15 minutes with multiple models)
+- Take a significant amount of time to complete (5-10 minutes with multiple models)
 - Consume substantial API tokens due to multiple rounds of debate
 - Incur higher costs than single-model approaches
 
 **Typical resource usage:**
 - Multi-model debate: 2-4x more tokens than a single model approach
-- Processing time: 5-15 minutes depending on complexity and model availability
+- Processing time: 5-10 minutes depending on complexity and model availability
 - API costs: $0.30-$1.50 per plan generation (varies by models used and plan complexity)
 
 ## Prerequisites
