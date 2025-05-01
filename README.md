@@ -79,9 +79,9 @@ flowchart LR
   %% ─────────────────– BEGIN LOOP OVER ROUNDS 2 … N  ──────────────
   subgraph Loop[Round 2 … N]
     direction LR
-    B1[Synthesis<br/>each model refines its own plan] --> B2[Consensus Check]
+    B1[Synthesis<br/>*each model refines its own plan*] --> B2[Consensus Check]
     B2 -->|Reached| F[Go to Judgment ✨]
-    B2 -->|Not reached| B3[Critique<br/>models critique others] --> B1
+    B2 -->|Not reached| B3[Critique<br/>*models critique others*] --> B1
   end
   
   %% ─────────────────────────  FINAL  ────────────────────────────
@@ -114,7 +114,7 @@ flowchart TD
   C1[Generate Plan 1] --> C2[Generate Plan 2] --> C3[Generate Plan 3]
   C3 --> R2[Round 2 – Self-Refinement]
   R2 --> R3[Round 3 – Self-Refinement]
-  R3 --> FCoRT[🏁 Final Plan (best of all)]
+  R3 --> FCoRT[Final Plan - best of all]
   
   style FCoRT fill:#D0F0D7,stroke:#2F855A,stroke-width:2px
 ```
