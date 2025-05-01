@@ -96,6 +96,8 @@ function createServer(): McpServer {
     `Send a prompt to sage-like model for its opinion on a matter.
 
     Include the paths to all relevant files and/or directories that are pertinent to the matter.
+    
+    IMPORTANT: All paths must be absolute paths (e.g., /home/user/project/src), not relative paths.
 
     Do not worry about context limits; feel free to include as much as you think is relevant. If you include too much it will error and tell you, and then you can include less. Err on the side of including more context.`,
     {
@@ -103,7 +105,7 @@ function createServer(): McpServer {
       paths: z
         .array(z.string())
         .describe(
-          "Paths to include as context. Including directories will include all files contained within recursively.",
+          "Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively.",
         ),
     },
     async ({ prompt, paths }, { sendNotification }) => {
@@ -224,6 +226,8 @@ function createServer(): McpServer {
     Use this tool any time the user asks for a "sage review" or "code review" or "expert review".
 
     This tool includes the full content of all files in the specified paths and instructs the model to return edit suggestions in a specific format with search and replace blocks.
+    
+    IMPORTANT: All paths must be absolute paths (e.g., /home/user/project/src), not relative paths.
 
     If the user hasn't provided specific paths, use as many paths to files or directories as you're aware of that are useful in the context of the prompt.`,
     {
@@ -233,7 +237,7 @@ function createServer(): McpServer {
       paths: z
         .array(z.string())
         .describe(
-          "Paths to include as context. Including directories will include all files contained within recursively.",
+          "Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively.",
         ),
     },
     async ({ instruction, paths }, { sendNotification }) => {
@@ -419,11 +423,13 @@ function createServer(): McpServer {
     Models will generate initial plans, critique each other's work, refine their plans based on critiques,
     and finally produce a consensus plan that combines the best ideas.
     
+    IMPORTANT: All paths must be absolute paths (e.g., /home/user/project/src), not relative paths.
+    
     The process creates detailed, well-thought-out implementation plans that benefit from
     diverse model perspectives and iterative refinement.`,
     {
       prompt: z.string().describe("The task to create an implementation plan for"),
-      paths: z.array(z.string()).describe("Paths to include as context. Including directories will include all files contained within recursively."),
+      paths: z.array(z.string()).describe("Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively."),
       rounds: z.number().optional().describe("Number of debate rounds (default: 3)"),
       maxTokens: z.number().optional().describe("Maximum token budget for the debate"),
     },
