@@ -1,4 +1,5 @@
 # `mcp-sage`
+[![smithery badge](https://smithery.ai/badge/@jalehman/mcp-sage)](https://smithery.ai/server/@jalehman/mcp-sage)
 
 An MCP (Model Context Protocol) server that provides tools for sending prompts to either OpenAI's O3 model or Google's Gemini 2.5 Pro based on token count. The tools embed all referenced filepaths (recursively for folders) in the prompt. This is useful for getting second opinions or detailed code reviews from a model that can handle tons of context accurately.
 
@@ -187,6 +188,16 @@ When only one model is available, a [Chain of Recursive Thoughts (CoRT)](https:/
 - An OpenAI API key (for smaller contexts)
 
 ## Installation
+
+### Installing via Smithery
+
+To install Sage for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@jalehman/mcp-sage):
+
+```bash
+npx -y @smithery/cli install @jalehman/mcp-sage --client claude
+```
+
+### Installing manually
 
 ```bash
 # Clone the repository

@@ -1,0 +1,40 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  type: stdio
+  configSchema:
+    # JSON Schema defining the configuration options for the MCP.
+    type: object
+    required: []
+    properties:
+      openaiApiKey:
+        type: string
+        description: OpenAI API key for O3 model
+      geminiApiKey:
+        type: string
+        description: Google Gemini API key for Gemini 2.5 Pro
+      httpPort:
+        type: number
+        default: 0
+        description: Optional HTTP port to expose (if using --http)
+  commandFunction:
+    # A JS function that produces the CLI command based on the given config to start the MCP on stdio.
+    |-
+    (config) => {
+      const args = [];
+      if (config.httpPort && config.httpPort > 0) {
+        args.push('--http', config.httpPort.toString());
+      }
+      return {
+        command: 'node',
+        args: ['dist/index.js', ...args],
+        env: {
+          OPENAI_API_KEY: config.openaiApiKey || '',
+          GEMINI_API_KEY: config.geminiApiKey || ''
+        }
+      };
+    }
+  exampleConfig:
+    openaiApiKey: YOUR_OPENAI_API_KEY
+    geminiApiKey: YOUR_GEMINI_API_KEY
+    httpPort: 0
