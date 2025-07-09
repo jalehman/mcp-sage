@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/jalehman-mcp-sage-badge.png)](https://mseep.ai/app/jalehman-mcp-sage)
+
 # `mcp-sage`
 [![smithery badge](https://smithery.ai/badge/@jalehman/mcp-sage)](https://smithery.ai/server/@jalehman/mcp-sage)
 
