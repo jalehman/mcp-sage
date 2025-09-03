@@ -3,8 +3,8 @@
 import { analyzeXmlTokens } from "./tokenCounter";
 import { sendGeminiPrompt } from "./gemini";
 import { sendOpenAiPrompt } from "./openai";
-import { 
-  ModelType, 
+import {
+  ModelType,
   ModelConfig,
   Models,
   O3_MODEL_NAME,
@@ -12,18 +12,20 @@ import {
   GPT5_MODEL_NAME,
   GPT5_TOKEN_LIMIT,
   GEMINI_MODEL_NAME,
-  GEMINI_TOKEN_LIMIT 
+  GEMINI_TOKEN_LIMIT,
 } from "./modelDefinitions";
 
 // Re-export model types and definitions for convenience
-export { 
-  ModelType, 
+export {
+  ModelType,
   ModelConfig,
   Models,
+  O3_MODEL_NAME,
+  O3_TOKEN_LIMIT,
   GPT5_MODEL_NAME,
   GPT5_TOKEN_LIMIT,
   GEMINI_MODEL_NAME,
-  GEMINI_TOKEN_LIMIT 
+  GEMINI_TOKEN_LIMIT,
 };
 
 /**
@@ -54,17 +56,17 @@ export interface ModelSelection {
 export function getAvailableModels(): ModelConfig[] {
   const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
   const hasGeminiKey = !!process.env.GEMINI_API_KEY;
-  
+
   const availableModels: ModelConfig[] = [];
-  
+
   if (hasOpenAiKey) {
     availableModels.push({ ...Models.GPT5, available: true });
   }
-  
+
   if (hasGeminiKey) {
     availableModels.push({ ...Models.GEMINI, available: true });
   }
-  
+
   return availableModels;
 }
 
@@ -111,17 +113,41 @@ export function selectModelBasedOnTokens(combined: string): ModelSelection {
 
   /* — Error branches — */
   if (!hasOpenAiKey && !hasGeminiKey) {
-    return { modelName: "none", modelType: "gemini", tokenCount, withinLimit: false, tokenLimit: 0 };
+    return {
+      modelName: "none",
+      modelType: "gemini",
+      tokenCount,
+      withinLimit: false,
+      tokenLimit: 0,
+    };
   }
   if (!hasOpenAiKey && tokenCount <= Models.GPT5.tokenLimit) {
-    return { modelName: "none", modelType: "openai", tokenCount, withinLimit: false, tokenLimit: Models.GPT5.tokenLimit };
+    return {
+      modelName: "none",
+      modelType: "openai",
+      tokenCount,
+      withinLimit: false,
+      tokenLimit: Models.GPT5.tokenLimit,
+    };
   }
   if (!hasGeminiKey && tokenCount > Models.GPT5.tokenLimit) {
-    return { modelName: "none", modelType: "gemini", tokenCount, withinLimit: false, tokenLimit: Models.GEMINI.tokenLimit };
+    return {
+      modelName: "none",
+      modelType: "gemini",
+      tokenCount,
+      withinLimit: false,
+      tokenLimit: Models.GEMINI.tokenLimit,
+    };
   }
 
   /* Exhausted all limits */
-  return { modelName: "none", modelType: "gemini", tokenCount, withinLimit: false, tokenLimit: Models.GEMINI.tokenLimit };
+  return {
+    modelName: "none",
+    modelType: "gemini",
+    tokenCount,
+    withinLimit: false,
+    tokenLimit: Models.GEMINI.tokenLimit,
+  };
 }
 
 /*----------------------------------------------------------------------------
@@ -129,47 +155,73 @@ export function selectModelBasedOnTokens(combined: string): ModelSelection {
 ----------------------------------------------------------------------------*/
 export async function sendToModelWithFallback(
   combined: string,
-  { modelName, modelType, tokenCount }: Pick<ModelSelection, "modelName" | "modelType" | "tokenCount">,
+  {
+    modelName,
+    modelType,
+    tokenCount,
+  }: Pick<ModelSelection, "modelName" | "modelType" | "tokenCount">,
   sendNotification: (n: any) => Promise<void>,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
 ): Promise<string> {
   try {
     // Helper function to adapt our notification format to what openai.ts expects
-    const notifyAdapter = async (message: {level: 'info' | 'warning' | 'error' | 'debug'; data: string}) => {
+    const notifyAdapter = async (message: {
+      level: "info" | "warning" | "error" | "debug";
+      data: string;
+    }) => {
       // Check if sendNotification is already expecting our internal format
-      if (typeof sendNotification === 'function' && sendNotification.length === 1) {
+      if (
+        typeof sendNotification === "function" &&
+        sendNotification.length === 1
+      ) {
         try {
           // If this is the raw notification handler from debateOrchestrator
           await sendNotification(message);
         } catch (e) {
           // Fall back to the wrapped format if direct call fails
-          await sendNotification({ 
-            method: "notifications/message", 
-            params: message 
+          await sendNotification({
+            method: "notifications/message",
+            params: message,
           });
         }
       } else {
         // Default behavior - wrap in MCP notification format
-        await sendNotification({ 
-          method: "notifications/message", 
-          params: message 
+        await sendNotification({
+          method: "notifications/message",
+          params: message,
         });
       }
     };
-    
+
     if (modelType === "openai") {
-      await sendNotification({ method: "notifications/message", params: { level: "info", data: `Sending request to OpenAI ${modelName} with ${tokenCount.toLocaleString()} tokens…` } });
+      await sendNotification({
+        method: "notifications/message",
+        params: {
+          level: "info",
+          data: `Sending request to OpenAI ${modelName} with ${tokenCount.toLocaleString()} tokens…`,
+        },
+      });
       // Pass the notification adapter to handle rate limit retries
-      return await sendOpenAiPrompt(combined, { model: modelName }, notifyAdapter, abortSignal);
+      return await sendOpenAiPrompt(
+        combined,
+        { model: modelName },
+        notifyAdapter,
+        abortSignal,
+      );
     }
 
-    await sendNotification({ method: "notifications/message", params: { level: "info", data: `Sending request to Gemini with ${tokenCount.toLocaleString()} tokens…` } });
+    await sendNotification({
+      method: "notifications/message",
+      params: {
+        level: "info",
+        data: `Sending request to Gemini with ${tokenCount.toLocaleString()} tokens…`,
+      },
+    });
     return await sendGeminiPrompt(combined, { model: modelName }, abortSignal);
-
   } catch (error) {
     /* Network‑level fallback logic */
     const hasGeminiKey = !!process.env.GEMINI_API_KEY;
-    
+
     // OpenAI to Gemini fallback
     if (
       modelType === "openai" &&
@@ -178,13 +230,25 @@ export async function sendToModelWithFallback(
       error instanceof Error &&
       error.message.includes("OpenAI API unreachable")
     ) {
-      await sendNotification({ method: "notifications/message", params: { level: "warning", data: "OpenAI API unreachable. Falling back to Gemini…" } });
-      await sendNotification({ method: "notifications/message", params: { level: "info", data: `Sending request to Gemini with ${tokenCount.toLocaleString()} tokens…` } });
+      await sendNotification({
+        method: "notifications/message",
+        params: {
+          level: "warning",
+          data: "OpenAI API unreachable. Falling back to Gemini…",
+        },
+      });
+      await sendNotification({
+        method: "notifications/message",
+        params: {
+          level: "info",
+          data: `Sending request to Gemini with ${tokenCount.toLocaleString()} tokens…`,
+        },
+      });
       return await sendGeminiPrompt(combined, {}, abortSignal);
     }
-    
+
     // Other model-specific fallbacks could be added here
-    
+
     throw error;
   }
 }

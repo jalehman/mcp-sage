@@ -18,6 +18,7 @@ import {
   sendToModelWithFallback,
   GEMINI_TOKEN_LIMIT,
   GPT5_TOKEN_LIMIT,
+  O3_TOKEN_LIMIT,
 } from "./modelManager";
 
 // Import strategy registry
@@ -46,7 +47,7 @@ async function packFiles(paths: string[]): Promise<string> {
     return packFilesSync(paths, {
       includeHidden: false,
       respectGitignore: true,
-      includeLineNumbers: true
+      includeLineNumbers: true,
     });
   } catch (error) {
     // Error will be handled by the caller who can use proper MCP notifications
@@ -78,7 +79,10 @@ ${prompt}
  * @param limit - The token limit to check against (defaults to Gemini's limit)
  * @returns Whether the content is within limits
  */
-function isWithinTokenLimit(combined: string, limit: number = GEMINI_TOKEN_LIMIT): boolean {
+function isWithinTokenLimit(
+  combined: string,
+  limit: number = GEMINI_TOKEN_LIMIT,
+): boolean {
   const tokenAnalysis = analyzeXmlTokens(combined);
   return tokenAnalysis.totalTokens <= limit;
 }
@@ -108,7 +112,7 @@ function createServer(): McpServer {
     `Send a prompt to sage-like model for its opinion on a matter.
 
     Include the paths to all relevant files and/or directories that are pertinent to the matter.
-    
+
     IMPORTANT: All paths must be absolute paths (e.g., /home/user/project/src), not relative paths.
 
     Do not worry about context limits; feel free to include as much as you think is relevant. If you include too much it will error and tell you, and then you can include less. Err on the side of including more context.`,
@@ -119,20 +123,28 @@ function createServer(): McpServer {
         .describe(
           "Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively.",
         ),
-      useDebate: z.boolean().optional().default(false)
+      useDebate: z
+        .boolean()
+        .optional()
+        .default(false)
         .describe("Whether to use multi-model debate to generate the opinion"),
-      debateConfig: z.object({
-        rounds: z.number().optional(),
-        maxTotalTokens: z.number().optional(),
-        logLevel: z.enum(["warn", "info", "debug"]).optional()
-      }).optional()
-        .describe("Configuration options for the debate process")
+      debateConfig: z
+        .object({
+          rounds: z.number().optional(),
+          maxTotalTokens: z.number().optional(),
+          logLevel: z.enum(["warn", "info", "debug"]).optional(),
+        })
+        .optional()
+        .describe("Configuration options for the debate process"),
     },
-    async ({ prompt, paths, useDebate, debateConfig }, { sendNotification }) => {
+    async (
+      { prompt, paths, useDebate, debateConfig },
+      { sendNotification },
+    ) => {
       try {
         // Pack the files up front - we'll need them in either case
         const packedFiles = await packFiles(paths);
-        
+
         // Check if debate is enabled
         if (useDebate) {
           await sendNotification({
@@ -142,12 +154,12 @@ function createServer(): McpServer {
               data: `Using debate mode for sage-opinion with ${debateConfig?.rounds || 2} rounds`,
             },
           });
-          
+
           const strategy = await getStrategy(ToolType.Opinion);
           if (!strategy) {
             throw new Error("Opinion strategy not found");
           }
-          
+
           const result = await runDebate(
             {
               toolType: ToolType.Opinion,
@@ -155,8 +167,8 @@ function createServer(): McpServer {
               codeContext: packedFiles, // Add packed files as context
               debateConfig: {
                 enabled: true,
-                ...debateConfig
-              }
+                ...debateConfig,
+              },
             },
             async (notification) => {
               // Fix notification nesting by passing the notification directly
@@ -164,22 +176,25 @@ function createServer(): McpServer {
                 method: "notifications/message",
                 params: {
                   level: notification.level,
-                  data: notification.data
-                }
+                  data: notification.data,
+                },
               });
-            }
+            },
           );
-          
+
           return {
             content: [
               {
                 type: "text",
-                text: 'opinion' in result ? result.opinion : "Error: No opinion generated"
-              }
+                text:
+                  "opinion" in result
+                    ? result.opinion
+                    : "Error: No opinion generated",
+              },
             ],
             metadata: {
-              meta: result.meta
-            }
+              meta: result.meta,
+            },
           };
         }
 
@@ -188,7 +203,8 @@ function createServer(): McpServer {
 
         // Select model based on token count and get token information
         const modelSelection = selectModelBasedOnTokens(combined);
-        const { modelName, modelType, tokenCount, withinLimit, tokenLimit } = modelSelection;
+        const { modelName, modelType, tokenCount, withinLimit, tokenLimit } =
+          modelSelection;
 
         // Log token usage via MCP logging notification
         await sendNotification({
@@ -210,21 +226,21 @@ function createServer(): McpServer {
         if (!withinLimit) {
           // Handle different error cases
           let errorMsg = "";
-          
-          if (modelName === 'none' && tokenLimit === 0) {
+
+          if (modelName === "none" && tokenLimit === 0) {
             // No API keys available
             errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${GPT5_TOKEN_LIMIT.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens.`;
-          } else if (modelType === 'openai' && !process.env.OPENAI_API_KEY) {
+          } else if (modelType === "openai" && !process.env.OPENAI_API_KEY) {
             // Missing OpenAI API key
             errorMsg = `Error: OpenAI API key not set. This content (${tokenCount.toLocaleString()} tokens) could be processed by O3, but OPENAI_API_KEY is missing. Please set the environment variable or use a smaller context.`;
-          } else if (modelType === 'gemini' && !process.env.GEMINI_API_KEY) {
+          } else if (modelType === "gemini" && !process.env.GEMINI_API_KEY) {
             // Missing Gemini API key
             errorMsg = `Error: Gemini API key not set. This content (${tokenCount.toLocaleString()} tokens) requires Gemini's larger context window, but GEMINI_API_KEY is missing. Please set the environment variable.`;
           } else {
             // Content exceeds all available model limits
             errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (O3: ${GPT5_TOKEN_LIMIT.toLocaleString()}, Gemini: ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens). Please reduce the number of files or shorten the prompt.`;
           }
-          
+
           await sendNotification({
             method: "notifications/message",
             params: {
@@ -242,9 +258,9 @@ function createServer(): McpServer {
         // Send to appropriate model based on selection with fallback capability
         const startTime = Date.now();
         const response = await sendToModelWithFallback(
-          combined, 
+          combined,
           { modelName, modelType, tokenCount },
-          sendNotification
+          sendNotification,
         );
 
         const elapsedTime = Date.now() - startTime;
@@ -296,7 +312,7 @@ function createServer(): McpServer {
     Use this tool any time the user asks for a "sage review" or "code review" or "expert review".
 
     This tool includes the full content of all files in the specified paths and instructs the model to return edit suggestions in a specific format with search and replace blocks.
-    
+
     IMPORTANT: All paths must be absolute paths (e.g., /home/user/project/src), not relative paths.
 
     If the user hasn't provided specific paths, use as many paths to files or directories as you're aware of that are useful in the context of the prompt.`,
@@ -309,16 +325,24 @@ function createServer(): McpServer {
         .describe(
           "Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively.",
         ),
-      useDebate: z.boolean().optional().default(false)
+      useDebate: z
+        .boolean()
+        .optional()
+        .default(false)
         .describe("Whether to use multi-model debate to generate the review"),
-      debateConfig: z.object({
-        rounds: z.number().optional(),
-        maxTotalTokens: z.number().optional(),
-        logLevel: z.enum(["warn", "info", "debug"]).optional()
-      }).optional()
-        .describe("Configuration options for the debate process")
+      debateConfig: z
+        .object({
+          rounds: z.number().optional(),
+          maxTotalTokens: z.number().optional(),
+          logLevel: z.enum(["warn", "info", "debug"]).optional(),
+        })
+        .optional()
+        .describe("Configuration options for the debate process"),
     },
-    async ({ instruction, paths, useDebate, debateConfig }, { sendNotification }) => {
+    async (
+      { instruction, paths, useDebate, debateConfig },
+      { sendNotification },
+    ) => {
       try {
         // Check if debate is enabled
         if (useDebate) {
@@ -329,42 +353,45 @@ function createServer(): McpServer {
               data: `Using debate mode for sage-review with ${debateConfig?.rounds || 2} rounds`,
             },
           });
-          
+
           const strategy = await getStrategy(ToolType.Review);
           if (!strategy) {
             throw new Error("Review strategy not found");
           }
-          
+
           const result = await runDebate(
             {
               toolType: ToolType.Review,
               userPrompt: instruction,
               debateConfig: {
                 enabled: true,
-                ...debateConfig
-              }
+                ...debateConfig,
+              },
             },
             async (notification) => {
               await sendNotification({
                 method: "notifications/message",
-                params: notification
+                params: notification,
               });
-            }
+            },
           );
-          
+
           return {
             content: [
               {
                 type: "text",
-                text: 'review' in result ? result.review : "Error: No review generated"
-              }
+                text:
+                  "review" in result
+                    ? result.review
+                    : "Error: No review generated",
+              },
             ],
             metadata: {
-              meta: result.meta
-            }
+              meta: result.meta,
+            },
           };
         }
-        
+
         // Pack the files
         const packedFiles = await packFiles(paths);
 
@@ -436,7 +463,8 @@ function createServer(): McpServer {
 
         // Select model based on token count and get token information
         const modelSelection = selectModelBasedOnTokens(combined);
-        const { modelName, modelType, tokenCount, withinLimit, tokenLimit } = modelSelection;
+        const { modelName, modelType, tokenCount, withinLimit, tokenLimit } =
+          modelSelection;
 
         // Log token usage via MCP logging notification
         await sendNotification({
@@ -458,21 +486,21 @@ function createServer(): McpServer {
         if (!withinLimit) {
           // Handle different error cases
           let errorMsg = "";
-          
-          if (modelName === 'none' && tokenLimit === 0) {
+
+          if (modelName === "none" && tokenLimit === 0) {
             // No API keys available
             errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${GPT5_TOKEN_LIMIT.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens.`;
-          } else if (modelType === 'openai' && !process.env.OPENAI_API_KEY) {
+          } else if (modelType === "openai" && !process.env.OPENAI_API_KEY) {
             // Missing OpenAI API key
             errorMsg = `Error: OpenAI API key not set. This content (${tokenCount.toLocaleString()} tokens) could be processed by O3, but OPENAI_API_KEY is missing. Please set the environment variable or use a smaller context.`;
-          } else if (modelType === 'gemini' && !process.env.GEMINI_API_KEY) {
+          } else if (modelType === "gemini" && !process.env.GEMINI_API_KEY) {
             // Missing Gemini API key
             errorMsg = `Error: Gemini API key not set. This content (${tokenCount.toLocaleString()} tokens) requires Gemini's larger context window, but GEMINI_API_KEY is missing. Please set the environment variable.`;
           } else {
             // Content exceeds all available model limits
             errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (O3: ${GPT5_TOKEN_LIMIT.toLocaleString()}, Gemini: ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens). Please reduce the number of files or shorten the instruction.`;
           }
-          
+
           await sendNotification({
             method: "notifications/message",
             params: {
@@ -490,9 +518,9 @@ function createServer(): McpServer {
         // Send to appropriate model based on selection with fallback capability
         const startTime = Date.now();
         const response = await sendToModelWithFallback(
-          combined, 
+          combined,
           { modelName, modelType, tokenCount },
-          sendNotification
+          sendNotification,
         );
 
         const elapsedTime = Date.now() - startTime;
@@ -540,45 +568,79 @@ function createServer(): McpServer {
   server.tool(
     "sage-plan",
     `Generate an implementation plan via multi-model debate.
-    
+
     This tool leverages multiple AI models to debate, critique, and refine implementation plans.
-    
+
     Models will generate initial plans, critique each other's work, refine their plans based on critiques,
     and finally produce a consensus plan that combines the best ideas.
-    
+
     IMPORTANT: All paths must be absolute paths (e.g., /home/user/project/src), not relative paths.
-    
+
     The process creates detailed, well-thought-out implementation plans that benefit from
     diverse model perspectives and iterative refinement.
-    
+
     When the optional outputPath parameter is provided, the final plan will be saved to that file path,
     and a complete transcript of the debate will be saved to a companion file with "-full-transcript"
     added to the filename. This is strongly recommended for preserving the expensive results of the debate.`,
     {
-      prompt: z.string().describe("The task to create an implementation plan for"),
-      paths: z.array(z.string()).describe("Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively."),
-      rounds: z.number().optional().describe("Number of debate rounds (default: 3)"),
-      maxTokens: z.number().optional().describe("Maximum token budget for the debate"),
-      outputPath: z.string().optional().describe("Markdown file path to save the final plan. Will also save a full transcript to a '-full-transcript.md' suffixed file."),
+      prompt: z
+        .string()
+        .describe("The task to create an implementation plan for"),
+      paths: z
+        .array(z.string())
+        .describe(
+          "Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively.",
+        ),
+      rounds: z
+        .number()
+        .optional()
+        .describe("Number of debate rounds (default: 3)"),
+      maxTokens: z
+        .number()
+        .optional()
+        .describe("Maximum token budget for the debate"),
+      outputPath: z
+        .string()
+        .optional()
+        .describe(
+          "Markdown file path to save the final plan. Will also save a full transcript to a '-full-transcript.md' suffixed file.",
+        ),
       // Legacy debate flag is still supported
-      debate: z.boolean().optional().default(false).describe("DEPRECATED - use debateConfig.enabled instead"),
+      debate: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("DEPRECATED - use debateConfig.enabled instead"),
       // New debate configuration
-      debateConfig: z.object({
-        enabled: z.boolean().optional(),
-        rounds: z.number().optional(),
-        maxTotalTokens: z.number().optional(),
-        logLevel: z.enum(["warn", "info", "debug"]).optional()
-      }).optional()
-        .describe("Configuration options for the debate process")
+      debateConfig: z
+        .object({
+          enabled: z.boolean().optional(),
+          rounds: z.number().optional(),
+          maxTotalTokens: z.number().optional(),
+          logLevel: z.enum(["warn", "info", "debug"]).optional(),
+        })
+        .optional()
+        .describe("Configuration options for the debate process"),
     },
-    async ({ prompt, paths, rounds, maxTokens, outputPath, debate = false, debateConfig }, { sendNotification }) => {
+    async (
+      {
+        prompt,
+        paths,
+        rounds,
+        maxTokens,
+        outputPath,
+        debate = false,
+        debateConfig,
+      },
+      { sendNotification },
+    ) => {
       try {
         // Pack files once to reduce memory usage
         const packedFiles = await packFiles(paths);
-        
+
         // Analyze token usage
         const tokenAnalysis = analyzeXmlTokens(packedFiles);
-        
+
         await sendNotification({
           method: "notifications/message",
           params: {
@@ -586,14 +648,15 @@ function createServer(): McpServer {
             data: `Code context token usage: ${tokenAnalysis.totalTokens.toLocaleString()} tokens, ${tokenAnalysis.documentCount} files included`,
           },
         });
-        
+
         // Combine code context with empty prompt - the actual prompt will be handled by the debate orchestrator
         const codeContext = combinePromptWithContext(packedFiles, "");
-        
+
         // Determine whether to use debate and which implementation
-        const useDebate: boolean = Boolean(debate) || Boolean(debateConfig?.enabled);
+        const useDebate: boolean =
+          Boolean(debate) || Boolean(debateConfig?.enabled);
         const useNewImplementation = true; // Set to false during transition if needed
-        
+
         // Legacy warning for 'debate' flag
         if (Boolean(debate)) {
           await sendNotification({
@@ -604,7 +667,7 @@ function createServer(): McpServer {
             },
           });
         }
-        
+
         if (useDebate) {
           if (useNewImplementation) {
             // Use the new debate implementation
@@ -615,12 +678,12 @@ function createServer(): McpServer {
                 data: `Using new debate implementation with ${debateConfig?.rounds || rounds || 3} rounds`,
               },
             });
-            
+
             const strategy = await getStrategy(ToolType.Plan);
             if (!strategy) {
               throw new Error("Plan strategy not found");
             }
-            
+
             const result = await runDebate(
               {
                 toolType: ToolType.Plan,
@@ -629,28 +692,31 @@ function createServer(): McpServer {
                   enabled: true,
                   rounds: debateConfig?.rounds || rounds || 3,
                   maxTotalTokens: debateConfig?.maxTotalTokens || maxTokens,
-                  logLevel: debateConfig?.logLevel || "info"
-                }
+                  logLevel: debateConfig?.logLevel || "info",
+                },
               },
-              async (notification: { level: 'info' | 'debug' | 'warning' | 'error'; data: string }) => {
+              async (notification: {
+                level: "info" | "debug" | "warning" | "error";
+                data: string;
+              }) => {
                 await sendNotification({
                   method: "notifications/message",
-                  params: notification
+                  params: notification,
                 });
-              }
+              },
             );
-            
+
             // If outputPath is provided, save the plan and full transcript
-            if (outputPath && 'finalPlan' in result) {
+            if (outputPath && "finalPlan" in result) {
               try {
                 // Ensure the directory exists
                 const outputDir = path.dirname(outputPath);
                 if (!fs.existsSync(outputDir)) {
                   fs.mkdirSync(outputDir, { recursive: true });
                 }
-                
+
                 // Write the final plan to the specified file
-                fs.writeFileSync(outputPath, result.finalPlan, 'utf8');
+                fs.writeFileSync(outputPath, result.finalPlan, "utf8");
                 await sendNotification({
                   method: "notifications/message",
                   params: {
@@ -658,14 +724,17 @@ function createServer(): McpServer {
                     data: `Successfully saved plan to: ${outputPath}`,
                   },
                 });
-                
+
                 // Generate the full transcript filename by adding suffix before extension
-                if ('debateLog' in result) {
+                if ("debateLog" in result) {
                   const extname = path.extname(outputPath);
                   const basename = path.basename(outputPath, extname);
                   const dirname = path.dirname(outputPath);
-                  const transcriptPath = path.join(dirname, `${basename}-full-transcript${extname}`);
-                  
+                  const transcriptPath = path.join(
+                    dirname,
+                    `${basename}-full-transcript${extname}`,
+                  );
+
                   // Format the full transcript with all debate details
                   const transcriptContent = [
                     `# Sage Plan Debate Full Transcript\n`,
@@ -675,14 +744,16 @@ function createServer(): McpServer {
                     `- Warnings: ${result.meta.warnings.length}`,
                     `- Total Time: ${Math.round(result.meta.timings.totalMs)}ms`,
                     `- Rounds: ${result.meta.rounds}\n\n`,
-                    `## Complete Debate Log\n\n`
-                  ].join('\n');
-                  
+                    `## Complete Debate Log\n\n`,
+                  ].join("\n");
+
                   // Add the transcript entries
-                  const fullContent = transcriptContent + result.debateLog.transcript.join('\n\n-----\n\n');
-                  
+                  const fullContent =
+                    transcriptContent +
+                    result.debateLog.transcript.join("\n\n-----\n\n");
+
                   // Write the transcript to file
-                  fs.writeFileSync(transcriptPath, fullContent, 'utf8');
+                  fs.writeFileSync(transcriptPath, fullContent, "utf8");
                   await sendNotification({
                     method: "notifications/message",
                     params: {
@@ -692,7 +763,8 @@ function createServer(): McpServer {
                   });
                 }
               } catch (error) {
-                const errorMsg = error instanceof Error ? error.message : String(error);
+                const errorMsg =
+                  error instanceof Error ? error.message : String(error);
                 await sendNotification({
                   method: "notifications/message",
                   params: {
@@ -702,14 +774,20 @@ function createServer(): McpServer {
                 });
               }
             }
-            
+
             return {
               content: [
-                { type: "text", text: 'finalPlan' in result ? result.finalPlan : "Error: No plan generated" }
+                {
+                  type: "text",
+                  text:
+                    "finalPlan" in result
+                      ? result.finalPlan
+                      : "Error: No plan generated",
+                },
               ],
               metadata: {
-                meta: result.meta
-              }
+                meta: result.meta,
+              },
             };
           } else {
             // Use our adapter to bridge between old and new implementation
@@ -717,10 +795,10 @@ function createServer(): McpServer {
               method: "notifications/message",
               params: {
                 level: "info",
-                data: "Using debate adapter for compatibility with legacy implementation"
-              }
+                data: "Using debate adapter for compatibility with legacy implementation",
+              },
             });
-            
+
             // Use the new debate implementation with the legacy adapter
             const result = await runDebate(
               {
@@ -728,32 +806,33 @@ function createServer(): McpServer {
                 userPrompt: prompt,
                 debateConfig: {
                   enabled: true,
-                  rounds: typeof rounds === 'number' ? rounds : 3,
+                  rounds: typeof rounds === "number" ? rounds : 3,
                   maxTotalTokens: maxTokens,
-                  logLevel: "debug"
-                }
+                  logLevel: "debug",
+                },
               },
-              async (notification: { level: 'info' | 'debug' | 'warning' | 'error'; data: string }) => {
+              async (notification: {
+                level: "info" | "debug" | "warning" | "error";
+                data: string;
+              }) => {
                 await sendNotification({
                   method: "notifications/message",
-                  params: notification
+                  params: notification,
                 });
-              }
+              },
             );
-            
+
             // Return the result directly
-            if (!('finalPlan' in result)) {
-              throw new Error('Failed to generate plan');
+            if (!("finalPlan" in result)) {
+              throw new Error("Failed to generate plan");
             }
-            
+
             return {
-              content: [
-                { type: "text", text: result.finalPlan }
-              ],
-              metadata: { 
+              content: [{ type: "text", text: result.finalPlan }],
+              metadata: {
                 meta: result.meta,
-                complete: result.meta.warnings.length === 0
-              }
+                complete: result.meta.warnings.length === 0,
+              },
             };
           }
         } else {
@@ -765,13 +844,13 @@ function createServer(): McpServer {
               data: "Debate disabled. Using single-model inference.",
             },
           });
-          
+
           // Create the plan prompt
           const planPrompt = `
           You are an expert software engineer. Create a detailed implementation plan for:
-          
+
           ${prompt}
-          
+
           Your plan should include:
           1. Components/files to be created or modified
           2. Data structures and interfaces
@@ -779,35 +858,36 @@ function createServer(): McpServer {
           4. Implementation steps in priority order
           5. Potential challenges and solutions
           6. Testing approach
-          
+
           Return the plan in Markdown format under the heading "# Implementation Plan".
           `;
-          
+
           // Combine with the code context
           const combined = combinePromptWithContext(packedFiles, planPrompt);
-          
+
           // Select model based on token count
           const modelSelection = selectModelBasedOnTokens(combined);
-          const { modelName, modelType, tokenCount, withinLimit, tokenLimit } = modelSelection;
-          
+          const { modelName, modelType, tokenCount, withinLimit, tokenLimit } =
+            modelSelection;
+
           if (!withinLimit) {
             // Handle different error cases
             let errorMsg = "";
-            
-            if (modelName === 'none' && tokenLimit === 0) {
+
+            if (modelName === "none" && tokenLimit === 0) {
               // No API keys available
               errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${O3_TOKEN_LIMIT.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens.`;
-            } else if (modelType === 'openai' && !process.env.OPENAI_API_KEY) {
+            } else if (modelType === "openai" && !process.env.OPENAI_API_KEY) {
               // Missing OpenAI API key
               errorMsg = `Error: OpenAI API key not set. This content (${tokenCount.toLocaleString()} tokens) could be processed by O3, but OPENAI_API_KEY is missing. Please set the environment variable or use a smaller context.`;
-            } else if (modelType === 'gemini' && !process.env.GEMINI_API_KEY) {
+            } else if (modelType === "gemini" && !process.env.GEMINI_API_KEY) {
               // Missing Gemini API key
               errorMsg = `Error: Gemini API key not set. This content (${tokenCount.toLocaleString()} tokens) requires Gemini's larger context window, but GEMINI_API_KEY is missing. Please set the environment variable.`;
             } else {
               // Content exceeds all available model limits
               errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (O3: ${O3_TOKEN_LIMIT.toLocaleString()}, Gemini: ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens). Please reduce the number of files or shorten the prompt.`;
             }
-            
+
             await sendNotification({
               method: "notifications/message",
               params: {
@@ -815,23 +895,23 @@ function createServer(): McpServer {
                 data: `Request blocked: ${process.env.OPENAI_API_KEY ? "O3 available. " : "O3 unavailable. "}${process.env.GEMINI_API_KEY ? "Gemini available." : "Gemini unavailable."}`,
               },
             });
-            
+
             return {
               content: [{ type: "text", text: errorMsg }],
               isError: true,
             };
           }
-          
+
           // Send to appropriate model
           const startTime = Date.now();
           const response = await sendToModelWithFallback(
-            combined, 
+            combined,
             { modelName, modelType, tokenCount },
-            sendNotification
+            sendNotification,
           );
-          
+
           const elapsedTime = Date.now() - startTime;
-          
+
           await sendNotification({
             method: "notifications/message",
             params: {
@@ -839,7 +919,7 @@ function createServer(): McpServer {
               data: `Received response from ${modelName} in ${elapsedTime}ms`,
             },
           });
-          
+
           // If outputPath is provided, save the plan
           if (outputPath) {
             try {
@@ -848,9 +928,9 @@ function createServer(): McpServer {
               if (!fs.existsSync(outputDir)) {
                 fs.mkdirSync(outputDir, { recursive: true });
               }
-              
+
               // Write the final plan to the specified file
-              fs.writeFileSync(outputPath, response, 'utf8');
+              fs.writeFileSync(outputPath, response, "utf8");
               await sendNotification({
                 method: "notifications/message",
                 params: {
@@ -859,7 +939,8 @@ function createServer(): McpServer {
                 },
               });
             } catch (error) {
-              const errorMsg = error instanceof Error ? error.message : String(error);
+              const errorMsg =
+                error instanceof Error ? error.message : String(error);
               await sendNotification({
                 method: "notifications/message",
                 params: {
@@ -869,16 +950,14 @@ function createServer(): McpServer {
               });
             }
           }
-          
+
           return {
-            content: [
-              { type: "text", text: response }
-            ],
+            content: [{ type: "text", text: response }],
             metadata: {
               singleModel: true,
               modelName,
-              elapsedMs: elapsedTime
-            }
+              elapsedMs: elapsedTime,
+            },
           };
         }
       } catch (error) {
@@ -890,7 +969,7 @@ function createServer(): McpServer {
             data: `Error in sage-plan tool: ${errorMsg}`,
           },
         });
-        
+
         return {
           content: [{ type: "text", text: `Error: ${errorMsg}` }],
           isError: true,
@@ -910,7 +989,7 @@ async function startStdioServer() {
     const server = createServer();
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    
+
     // Use console.error for server messages since it won't interfere with stdout JSON-RPC
     console.error(
       'MCP Sage Server started with stdio transport. Available tools: "sage-opinion", "sage-review", and "sage-plan".',
