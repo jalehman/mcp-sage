@@ -123,13 +123,9 @@ function createServer(): McpServer {
         .describe(
           "Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively.",
         ),
-      useDebate: z
-        .boolean()
-        .optional()
-        .default(false)
-        .describe("Whether to use multi-model debate to generate the opinion"),
       debateConfig: z
         .object({
+          enabled: z.boolean().optional(),
           rounds: z.number().optional(),
           maxTotalTokens: z.number().optional(),
           logLevel: z.enum(["warn", "info", "debug"]).optional(),
@@ -137,16 +133,13 @@ function createServer(): McpServer {
         .optional()
         .describe("Configuration options for the debate process"),
     },
-    async (
-      { prompt, paths, useDebate, debateConfig },
-      { sendNotification },
-    ) => {
+    async ({ prompt, paths, debateConfig }, { sendNotification }) => {
       try {
         // Pack the files up front - we'll need them in either case
         const packedFiles = await packFiles(paths);
 
         // Check if debate is enabled
-        if (useDebate) {
+        if (debateConfig?.enabled) {
           await sendNotification({
             method: "notifications/message",
             params: {
@@ -325,13 +318,9 @@ function createServer(): McpServer {
         .describe(
           "Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively.",
         ),
-      useDebate: z
-        .boolean()
-        .optional()
-        .default(false)
-        .describe("Whether to use multi-model debate to generate the review"),
       debateConfig: z
         .object({
+          enabled: z.boolean().optional(),
           rounds: z.number().optional(),
           maxTotalTokens: z.number().optional(),
           logLevel: z.enum(["warn", "info", "debug"]).optional(),
@@ -339,13 +328,10 @@ function createServer(): McpServer {
         .optional()
         .describe("Configuration options for the debate process"),
     },
-    async (
-      { instruction, paths, useDebate, debateConfig },
-      { sendNotification },
-    ) => {
+    async ({ instruction, paths, debateConfig }, { sendNotification }) => {
       try {
         // Check if debate is enabled
-        if (useDebate) {
+        if (debateConfig?.enabled) {
           await sendNotification({
             method: "notifications/message",
             params: {
