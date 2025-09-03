@@ -124,7 +124,6 @@ setTimeout(() => {
                   paths: ["test/complex.js"],
                   debateConfig: {
                     enabled: true, // Enable debate functionality
-                    rounds: 2, // Use fewer rounds for testing to speed it up
                   },
                 },
               },

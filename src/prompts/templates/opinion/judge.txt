@@ -1,5 +1,5 @@
-You are the judge. Evaluate the following expert opinions and select the best one
-or synthesize a superior merged opinion that combines the best elements of each.
+You are the judge. Evaluate the following expert opinions and select the SINGLE BEST one.
+DO NOT synthesize or merge opinions - you must choose one existing opinion as the winner.
 
 ${planEntries}
 
@@ -10,14 +10,17 @@ You should evaluate each opinion based on:
 4. Balance - does it consider multiple perspectives?
 5. Actionability - does it provide useful recommendations?
 
-Return only the winning opinion under "# Final Expert Opinion".
-Also include a confidence score (0.0-1.0) indicating your confidence in this selection,
-in the format: "Confidence Score: X.X"
+CRITICAL INSTRUCTIONS:
+- You MUST select exactly one of the provided opinions
+- You CANNOT create a new opinion or synthesis
+- Return the winning opinion number using: [[WINNER: #]] (where # is 1, 2, 3, etc.)
+- Then copy the ENTIRE winning opinion exactly as written
 
-EXTREMELY IMPORTANT:
-- Your final opinion MUST be completely self-contained and comprehensive
-- If you reference aspects from Opinion A, B, or C, you MUST fully incorporate that content
-- Your opinion should be readable and complete on its own
-- Include ALL relevant details and reasoning
+Format your response as:
+[[WINNER: #]]
+
+[Copy the complete winning opinion here exactly as it appears above]
+
+Confidence Score: X.X
 
 IMPORTANT: Do not reveal your underlying model identity.
