@@ -49,10 +49,19 @@ export const Models = {
     costPerInputToken: 2 / 1000000, // approximation; varies based on input size
     costPerOutputToken: 12 / 1000000, // approximation; varies based on input size
   },
+  GPT5: {
+    name: "gpt-5-2025-08-07",
+    type: "openai" as ModelType,
+    tokenLimit: 400000,
+    costPerInputToken: 1.25 / 1000000,
+    costPerOutputToken: 10 / 1000000, 
+  }
 };
 
 // Constants for backward compatibility
 export const O3_MODEL_NAME = Models.O3.name;
 export const O3_TOKEN_LIMIT = Models.O3.tokenLimit;
+export const GPT5_MODEL_NAME = Models.GPT5.name;
+export const GPT5_TOKEN_LIMIT = Models.GPT5.tokenLimit;
 export const GEMINI_MODEL_NAME = Models.GEMINI.name;
 export const GEMINI_TOKEN_LIMIT = Models.GEMINI.tokenLimit;

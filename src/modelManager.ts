@@ -9,6 +9,8 @@ import {
   Models,
   O3_MODEL_NAME,
   O3_TOKEN_LIMIT,
+  GPT5_MODEL_NAME,
+  GPT5_TOKEN_LIMIT,
   GEMINI_MODEL_NAME,
   GEMINI_TOKEN_LIMIT 
 } from "./modelDefinitions";
@@ -18,8 +20,8 @@ export {
   ModelType, 
   ModelConfig,
   Models,
-  O3_MODEL_NAME,
-  O3_TOKEN_LIMIT,
+  GPT5_MODEL_NAME,
+  GPT5_TOKEN_LIMIT,
   GEMINI_MODEL_NAME,
   GEMINI_TOKEN_LIMIT 
 };
@@ -56,8 +58,7 @@ export function getAvailableModels(): ModelConfig[] {
   const availableModels: ModelConfig[] = [];
   
   if (hasOpenAiKey) {
-    availableModels.push({ ...Models.O3, available: true });
-    availableModels.push({ ...Models.GPT41, available: true });
+    availableModels.push({ ...Models.GPT5, available: true });
   }
   
   if (hasGeminiKey) {
@@ -75,14 +76,14 @@ export function selectModelBasedOnTokens(combined: string): ModelSelection {
   const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
   const hasGeminiKey = !!process.env.GEMINI_API_KEY;
 
-  // First try O3 (preferred for smaller contexts)
-  if (tokenCount <= Models.O3.tokenLimit && hasOpenAiKey) {
+  // First try GPT5 (preferred for smaller contexts)
+  if (tokenCount <= Models.GPT5.tokenLimit && hasOpenAiKey) {
     return {
-      modelName: Models.O3.name,
-      modelType: Models.O3.type,
+      modelName: Models.GPT5.name,
+      modelType: Models.GPT5.type,
       tokenCount,
       withinLimit: true,
-      tokenLimit: Models.O3.tokenLimit,
+      tokenLimit: Models.GPT5.tokenLimit,
     };
   }
 
@@ -112,10 +113,10 @@ export function selectModelBasedOnTokens(combined: string): ModelSelection {
   if (!hasOpenAiKey && !hasGeminiKey) {
     return { modelName: "none", modelType: "gemini", tokenCount, withinLimit: false, tokenLimit: 0 };
   }
-  if (!hasOpenAiKey && tokenCount <= Models.O3.tokenLimit) {
-    return { modelName: "none", modelType: "openai", tokenCount, withinLimit: false, tokenLimit: Models.O3.tokenLimit };
+  if (!hasOpenAiKey && tokenCount <= Models.GPT5.tokenLimit) {
+    return { modelName: "none", modelType: "openai", tokenCount, withinLimit: false, tokenLimit: Models.GPT5.tokenLimit };
   }
-  if (!hasGeminiKey && tokenCount > Models.O3.tokenLimit) {
+  if (!hasGeminiKey && tokenCount > Models.GPT5.tokenLimit) {
     return { modelName: "none", modelType: "gemini", tokenCount, withinLimit: false, tokenLimit: Models.GEMINI.tokenLimit };
   }
 

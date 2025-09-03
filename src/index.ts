@@ -17,8 +17,7 @@ import {
   selectModelBasedOnTokens,
   sendToModelWithFallback,
   GEMINI_TOKEN_LIMIT,
-  O3_MODEL_NAME,
-  O3_TOKEN_LIMIT,
+  GPT5_TOKEN_LIMIT,
 } from "./modelManager";
 
 // Import debate orchestrator for sage-plan
@@ -143,7 +142,7 @@ function createServer(): McpServer {
           
           if (modelName === 'none' && tokenLimit === 0) {
             // No API keys available
-            errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${O3_TOKEN_LIMIT.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens.`;
+            errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${GPT5_TOKEN_LIMIT.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens.`;
           } else if (modelType === 'openai' && !process.env.OPENAI_API_KEY) {
             // Missing OpenAI API key
             errorMsg = `Error: OpenAI API key not set. This content (${tokenCount.toLocaleString()} tokens) could be processed by O3, but OPENAI_API_KEY is missing. Please set the environment variable or use a smaller context.`;
@@ -152,7 +151,7 @@ function createServer(): McpServer {
             errorMsg = `Error: Gemini API key not set. This content (${tokenCount.toLocaleString()} tokens) requires Gemini's larger context window, but GEMINI_API_KEY is missing. Please set the environment variable.`;
           } else {
             // Content exceeds all available model limits
-            errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (O3: ${O3_TOKEN_LIMIT.toLocaleString()}, Gemini: ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens). Please reduce the number of files or shorten the prompt.`;
+            errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (O3: ${GPT5_TOKEN_LIMIT.toLocaleString()}, Gemini: ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens). Please reduce the number of files or shorten the prompt.`;
           }
           
           await sendNotification({
@@ -338,7 +337,7 @@ function createServer(): McpServer {
           
           if (modelName === 'none' && tokenLimit === 0) {
             // No API keys available
-            errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${O3_TOKEN_LIMIT.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens.`;
+            errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${GPT5_TOKEN_LIMIT.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens.`;
           } else if (modelType === 'openai' && !process.env.OPENAI_API_KEY) {
             // Missing OpenAI API key
             errorMsg = `Error: OpenAI API key not set. This content (${tokenCount.toLocaleString()} tokens) could be processed by O3, but OPENAI_API_KEY is missing. Please set the environment variable or use a smaller context.`;
@@ -347,7 +346,7 @@ function createServer(): McpServer {
             errorMsg = `Error: Gemini API key not set. This content (${tokenCount.toLocaleString()} tokens) requires Gemini's larger context window, but GEMINI_API_KEY is missing. Please set the environment variable.`;
           } else {
             // Content exceeds all available model limits
-            errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (O3: ${O3_TOKEN_LIMIT.toLocaleString()}, Gemini: ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens). Please reduce the number of files or shorten the instruction.`;
+            errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (O3: ${GPT5_TOKEN_LIMIT.toLocaleString()}, Gemini: ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens). Please reduce the number of files or shorten the instruction.`;
           }
           
           await sendNotification({
