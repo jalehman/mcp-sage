@@ -140,7 +140,7 @@ function createServer(): McpServer {
             method: "notifications/message",
             params: {
               level: "info",
-              data: `Using debate mode for sage-opinion with ${debateConfig?.rounds || 2} rounds`,
+              data: `Using debate mode for sage-opinion with ${debateConfig?.rounds} rounds`,
             },
           });
 

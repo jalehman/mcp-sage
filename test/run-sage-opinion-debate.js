@@ -124,6 +124,7 @@ setTimeout(() => {
                   paths: ["test/complex.js"],
                   debateConfig: {
                     enabled: true, // Enable debate functionality
+                    logLevel: "debug",
                   },
                 },
               },
@@ -171,15 +172,9 @@ setTimeout(() => {
               console.error("ERROR:", response.error);
             }
 
-            // Exit after receiving the response
-            // Set a longer timeout since batching might take time
-            setTimeout(
-              () => {
-                server.kill();
-                process.exit(0);
-              },
-              5 * 60 * 1000,
-            ); // 5 minutes
+            // Exit immediately after receiving the response
+            server.kill();
+            process.exit(0);
           }
         } catch (err) {
           console.error("Error parsing response:", err);

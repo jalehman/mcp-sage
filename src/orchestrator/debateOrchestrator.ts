@@ -248,12 +248,20 @@ export async function runDebate(
     round: 1,
   };
 
+  // Track which model created each candidate
+  const candidateModelMapping: {
+    candidateIndex: number;
+    modelId: string;
+    modelName: string;
+  }[] = [];
+
   await sendNotification({
     level: "info",
     data: `Starting debate for ${options.toolType} with ${debateModels.length} models and ${config.rounds} rounds`,
   });
 
   let finalOutput = "";
+  let judgeResult: any = null;
 
   // 3. Single-Model Shortcut
   if (debateModels.length === 1) {
@@ -435,10 +443,25 @@ export async function runDebate(
           }
         });
 
-        // Filter out null results (failed generations)
-        debateContext.candidates = candidateResults.filter(
-          (r): r is string => r !== null,
-        );
+        // Filter out null results and track which model created each candidate
+        let candidateIndex = 0;
+        const availableModelIds = Object.keys(idToModel);
+        debateContext.candidates = [];
+        candidateModelMapping.length = 0; // Clear any existing mappings
+
+        candidateResults.forEach((result, resultIndex) => {
+          if (result !== null) {
+            debateContext.candidates.push(result);
+            const modelId = availableModelIds[resultIndex];
+            const modelName = idToModel[modelId];
+            candidateModelMapping.push({
+              candidateIndex,
+              modelId,
+              modelName,
+            });
+            candidateIndex++;
+          }
+        });
 
         if (debateContext.candidates.length === 0) {
           throw new Error(
@@ -455,35 +478,31 @@ export async function runDebate(
           data: "Critique phase: Evaluating candidates...",
         });
 
-        console.error(
-          `[DEBUG-Debate] Starting critique phase with candidates: ${debateContext.candidates.length}`,
-        );
+        if (config.logLevel === "debug") {
+          await sendNotification({
+            level: "debug",
+            data: `Starting critique phase with candidates: ${debateContext.candidates.length}`,
+          });
+        }
 
         const modelIds = Object.keys(idToModel);
-        console.error(
-          `[DEBUG-Debate] Model IDs for critique: ${modelIds.join(", ")}`,
-        );
+        if (config.logLevel === "debug") {
+          await sendNotification({
+            level: "debug",
+            data: `Model IDs for critique: ${modelIds.join(", ")}`,
+          });
+        }
 
         const critiqueTasks = modelIds.map((modelId) => {
           const modelName = idToModel[modelId];
           const modelType = modelName.includes("gemini") ? "gemini" : "openai";
-          console.error(
-            `[DEBUG-Debate] Creating critique task for model ID: ${modelId}, name: ${modelName}, type: ${modelType}`,
-          );
 
           return async () => {
-            console.error(
-              `[DEBUG-Debate] Starting critique task for model ${modelId} (${modelName})`,
-            );
             // For critique, each model critiques all candidates
             const critiquePrompt = strategy.getPrompt("critique", {
               ...debateContext,
               round: parseInt(modelId, 36) || round, // Use the model ID as a numeric identifier
             });
-
-            console.error(
-              `[DEBUG-Debate] Critique prompt generated for model ${modelId}, length: ${critiquePrompt.length}`,
-            );
 
             // Record the prompt in the transcript
             addTranscript(
@@ -519,13 +538,7 @@ export async function runDebate(
                 return response.text;
               } else {
                 // Make actual API call
-                console.error(
-                  `[DEBUG-Debate] Sending critique prompt to model ${modelId} (${modelName})`,
-                );
 
-                console.error(
-                  `[DEBUG-Debate] About to call sendToModelWithFallback for ${modelName}`,
-                );
                 let response;
 
                 try {
@@ -539,20 +552,11 @@ export async function runDebate(
                     sendNotification,
                   );
 
-                  console.error(
-                    `[DEBUG-Debate] Received response from ${modelName} for critique`,
-                  );
                   response = parseModelResponse(
                     rawResponse,
                     critiquePrompt.length,
                   );
-                  console.error(
-                    `[DEBUG-Debate] Parsed response, length: ${response.text.length}`,
-                  );
                 } catch (critErr) {
-                  console.error(
-                    `[DEBUG-Debate] ERROR in critique API call: ${critErr instanceof Error ? critErr.message : String(critErr)}`,
-                  );
                   throw critErr;
                 }
 
@@ -669,7 +673,7 @@ export async function runDebate(
       }
 
       // Parse the judge's decision
-      const judgeResult = strategy.parseJudge(
+      judgeResult = strategy.parseJudge(
         judgeResponse.text,
         debateContext.candidates,
       );
@@ -721,6 +725,37 @@ export async function runDebate(
     strategy: strategy.toolType,
     rounds: debateContext.round,
   };
+
+  // Add winner information if we have a successful judge result
+  await sendNotification({
+    level: "info",
+    data: `Debug: judgeResult exists: ${!!judgeResult}, success: ${judgeResult?.success}, winnerIdx: ${judgeResult?.winnerIdx}`,
+  });
+
+  if (judgeResult && judgeResult.success && judgeResult.winnerIdx >= 0) {
+    await sendNotification({
+      level: "info",
+      data: `Looking for winner at index ${judgeResult.winnerIdx} in mapping: ${JSON.stringify(candidateModelMapping)}`,
+    });
+    const winnerMapping = candidateModelMapping.find(
+      (m) => m.candidateIndex === judgeResult.winnerIdx,
+    );
+    if (winnerMapping) {
+      meta.winner = {
+        modelId: winnerMapping.modelId,
+        modelName: winnerMapping.modelName,
+      };
+      await sendNotification({
+        level: "info",
+        data: `Found winner: ${winnerMapping.modelName} (${winnerMapping.modelId})`,
+      });
+    } else {
+      await sendNotification({
+        level: "info",
+        data: `No winner mapping found for index ${judgeResult.winnerIdx}`,
+      });
+    }
+  }
 
   // 7. Return the appropriate result shape based on the tool type
   const result: DebateResult = {

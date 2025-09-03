@@ -42,6 +42,11 @@ export interface DebateMeta {
   timings: { totalMs: number; perPhase: Record<string, number> };
   strategy: string;
   rounds: number;
+  winner?: {
+    modelId: string; // Anonymous model ID (e.g., "A", "B")
+    modelName: string; // Actual model name (e.g., "gpt-5-2025-08-07")
+    confidence?: number; // Judge confidence score (0.0-1.0)
+  };
 }
 
 export interface DebateWarning {

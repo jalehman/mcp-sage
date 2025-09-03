@@ -163,36 +163,36 @@ export async function sendToModelWithFallback(
   sendNotification: (n: any) => Promise<void>,
   abortSignal?: AbortSignal,
 ): Promise<string> {
-  try {
-    // Helper function to adapt our notification format to what openai.ts expects
-    const notifyAdapter = async (message: {
-      level: "info" | "warning" | "error" | "debug";
-      data: string;
-    }) => {
-      // Check if sendNotification is already expecting our internal format
-      if (
-        typeof sendNotification === "function" &&
-        sendNotification.length === 1
-      ) {
-        try {
-          // If this is the raw notification handler from debateOrchestrator
-          await sendNotification(message);
-        } catch (e) {
-          // Fall back to the wrapped format if direct call fails
-          await sendNotification({
-            method: "notifications/message",
-            params: message,
-          });
-        }
-      } else {
-        // Default behavior - wrap in MCP notification format
+  // Helper function to adapt our notification format to what openai.ts expects
+  const notifyAdapter = async (message: {
+    level: "info" | "warning" | "error" | "debug";
+    data: string;
+  }) => {
+    // Check if sendNotification is already expecting our internal format
+    if (
+      typeof sendNotification === "function" &&
+      sendNotification.length === 1
+    ) {
+      try {
+        // If this is the raw notification handler from debateOrchestrator
+        await sendNotification(message);
+      } catch (e) {
+        // Fall back to the wrapped format if direct call fails
         await sendNotification({
           method: "notifications/message",
           params: message,
         });
       }
-    };
+    } else {
+      // Default behavior - wrap in MCP notification format
+      await sendNotification({
+        method: "notifications/message",
+        params: message,
+      });
+    }
+  };
 
+  try {
     if (modelType === "openai") {
       await sendNotification({
         method: "notifications/message",
@@ -217,7 +217,12 @@ export async function sendToModelWithFallback(
         data: `Sending request to Gemini with ${tokenCount.toLocaleString()} tokens…`,
       },
     });
-    return await sendGeminiPrompt(combined, { model: modelName }, abortSignal);
+    return await sendGeminiPrompt(
+      combined,
+      { model: modelName },
+      abortSignal,
+      notifyAdapter,
+    );
   } catch (error) {
     /* Network‑level fallback logic */
     const hasGeminiKey = !!process.env.GEMINI_API_KEY;
@@ -244,7 +249,7 @@ export async function sendToModelWithFallback(
           data: `Sending request to Gemini with ${tokenCount.toLocaleString()} tokens…`,
         },
       });
-      return await sendGeminiPrompt(combined, {}, abortSignal);
+      return await sendGeminiPrompt(combined, {}, abortSignal, notifyAdapter);
     }
 
     // Other model-specific fallbacks could be added here
