@@ -6,16 +6,19 @@
 /* ------------------------------------------------------------------ */
 /* ENUMS                                                              */
 /* ------------------------------------------------------------------ */
-export enum ToolType { Plan = "plan", Opinion = "opinion", Review = "review" }
+export enum ToolType {
+  Opinion = "opinion",
+  Review = "review",
+}
 
 /* ------------------------------------------------------------------ */
 /* USER-FACING CONFIG                                                 */
 /* ------------------------------------------------------------------ */
 export interface DebateConfig {
-  enabled?: boolean;            // default: false
-  rounds?: number;              // default: 1
-  strategy?: "plan" | "opinion" | "review"; // auto-derived if omitted
-  maxTotalTokens?: number;      // optional cost guard
+  enabled?: boolean; // default: false
+  rounds?: number; // default: 1
+  strategy?: "opinion" | "review"; // auto-derived if omitted
+  maxTotalTokens?: number; // optional cost guard
   logLevel?: "warn" | "info" | "debug";
 }
 
@@ -25,16 +28,16 @@ export interface DebateConfig {
 export interface DebateOptions {
   toolType: ToolType;
   userPrompt: string;
-  codeContext?: string;         // Packed files XML to provide context
-  debateConfig?: DebateConfig;  // NEW preferred field
-  debate?: boolean;             // LEGACY (plan only) – still honoured
+  codeContext?: string; // Packed files XML to provide context
+  debateConfig?: DebateConfig; // NEW preferred field
+  debate?: boolean; // LEGACY (plan only) – still honoured
 }
 
 /* ------------------------------------------------------------------ */
 /* RESULT                                                             */
 /* ------------------------------------------------------------------ */
 export interface DebateMeta {
-  warnings: DebateWarning[];                  // always populated
+  warnings: DebateWarning[]; // always populated
   tokenUsage: { prompt: number; completion: number };
   timings: { totalMs: number; perPhase: Record<string, number> };
   strategy: string;
@@ -47,10 +50,15 @@ export interface DebateWarning {
   phase: "generate" | "critique" | "judge" | "validate";
 }
 
-export type DebateResult = 
-  | ({ toolType: ToolType.Plan; finalPlan: string } & { meta: DebateMeta } & ({} | { debateLog: DebateLog }))
-  | ({ toolType: ToolType.Opinion; opinion: string } & { meta: DebateMeta } & ({} | { debateLog: DebateLog }))
-  | ({ toolType: ToolType.Review; review: string } & { meta: DebateMeta } & ({} | { debateLog: DebateLog }));
+export type DebateResult =
+  | ({ toolType: ToolType.Opinion; opinion: string } & { meta: DebateMeta } & (
+        | {}
+        | { debateLog: DebateLog }
+      ))
+  | ({ toolType: ToolType.Review; review: string } & { meta: DebateMeta } & (
+        | {}
+        | { debateLog: DebateLog }
+      ));
 
 export interface DebateLog {
   transcript: string[];
