@@ -73,6 +73,10 @@ export async function sendOpenAiPrompt(
   notifyFn?: (message: {level: 'info' | 'warning' | 'error' | 'debug'; data: string}) => Promise<void>,
   abortSignal?: AbortSignal
 ): Promise<string> {
+  // Debug logging via stderr to help trace execution flow
+  console.error(`[DEBUG-OpenAI] Starting sendOpenAiPrompt with model: ${options.model || O3_MODEL_NAME}`);
+  console.error(`[DEBUG-OpenAI] Prompt length: ${prompt.length}, Has notify function: ${!!notifyFn}, Has signal: ${!!abortSignal}`);
+  
   const client = getOpenaiClient();
   const model = options.model || O3_MODEL_NAME;
   
@@ -100,6 +104,8 @@ export async function sendOpenAiPrompt(
         await notifyFn({ level: 'debug', data: `Sending request to OpenAI API (${model})...` });
       }
 
+      console.error(`[DEBUG-OpenAI] About to call chat.completions.create with model: ${model}`);
+      
       const completion = await client.chat.completions.create({
         model: model,
         messages: [{ role: 'user', content: prompt }],
@@ -107,6 +113,9 @@ export async function sendOpenAiPrompt(
         top_p: options.topP,
         max_tokens: options.maxOutputTokens,
       }, { signal: abortSignal });
+      
+      console.error(`[DEBUG-OpenAI] API call returned successfully`);
+      
 
       const textResponse = completion.choices[0]?.message?.content;
 

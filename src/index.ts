@@ -20,8 +20,21 @@ import {
   GPT5_TOKEN_LIMIT,
 } from "./modelManager";
 
-// Import debate orchestrator for sage-plan
+// Import strategy registry
+import { getStrategy } from "./strategies/registry";
+import { ToolType } from "./types/public";
+
+// Import the new debate orchestrator and the legacy adapter
+import { runDebate } from "./orchestrator/debateOrchestrator";
+import { legacyDebateAdapter } from "./adapters/planCompatibility";
+
+// Import the legacy debate for backward compatibility during transition
 import { debate } from "./debateOrchestrator";
+
+// Load all strategies to ensure they register themselves
+import "./strategies/planStrategy";
+import "./strategies/opinionStrategy";
+import "./strategies/reviewStrategy";
 
 async function packFiles(paths: string[]): Promise<string> {
   if (paths.length === 0) {
@@ -106,11 +119,69 @@ function createServer(): McpServer {
         .describe(
           "Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively.",
         ),
+      useDebate: z.boolean().optional().default(false)
+        .describe("Whether to use multi-model debate to generate the opinion"),
+      debateConfig: z.object({
+        rounds: z.number().optional(),
+        maxTotalTokens: z.number().optional(),
+        logLevel: z.enum(["warn", "info", "debug"]).optional()
+      }).optional()
+        .describe("Configuration options for the debate process")
     },
-    async ({ prompt, paths }, { sendNotification }) => {
+    async ({ prompt, paths, useDebate, debateConfig }, { sendNotification }) => {
       try {
-        // Pack the files
+        // Pack the files up front - we'll need them in either case
         const packedFiles = await packFiles(paths);
+        
+        // Check if debate is enabled
+        if (useDebate) {
+          await sendNotification({
+            method: "notifications/message",
+            params: {
+              level: "info",
+              data: `Using debate mode for sage-opinion with ${debateConfig?.rounds || 2} rounds`,
+            },
+          });
+          
+          const strategy = await getStrategy(ToolType.Opinion);
+          if (!strategy) {
+            throw new Error("Opinion strategy not found");
+          }
+          
+          const result = await runDebate(
+            {
+              toolType: ToolType.Opinion,
+              userPrompt: prompt,
+              codeContext: packedFiles, // Add packed files as context
+              debateConfig: {
+                enabled: true,
+                ...debateConfig
+              }
+            },
+            async (notification) => {
+              // Fix notification nesting by passing the notification directly
+              await sendNotification({
+                method: "notifications/message",
+                params: {
+                  level: notification.level,
+                  data: notification.data
+                }
+              });
+            }
+          );
+          
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'opinion' in result ? result.opinion : "Error: No opinion generated"
+              }
+            ],
+            metadata: {
+              meta: result.meta
+            }
+          };
+        }
 
         // Combine with the prompt
         const combined = combinePromptWithContext(packedFiles, prompt);
@@ -200,7 +271,7 @@ function createServer(): McpServer {
           method: "notifications/message",
           params: {
             level: "error",
-            data: `Error in second-opinion tool: ${errorMsg}`,
+            data: `Error in sage-opinion tool: ${errorMsg}`,
           },
         });
 
@@ -238,9 +309,62 @@ function createServer(): McpServer {
         .describe(
           "Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively.",
         ),
+      useDebate: z.boolean().optional().default(false)
+        .describe("Whether to use multi-model debate to generate the review"),
+      debateConfig: z.object({
+        rounds: z.number().optional(),
+        maxTotalTokens: z.number().optional(),
+        logLevel: z.enum(["warn", "info", "debug"]).optional()
+      }).optional()
+        .describe("Configuration options for the debate process")
     },
-    async ({ instruction, paths }, { sendNotification }) => {
+    async ({ instruction, paths, useDebate, debateConfig }, { sendNotification }) => {
       try {
+        // Check if debate is enabled
+        if (useDebate) {
+          await sendNotification({
+            method: "notifications/message",
+            params: {
+              level: "info",
+              data: `Using debate mode for sage-review with ${debateConfig?.rounds || 2} rounds`,
+            },
+          });
+          
+          const strategy = await getStrategy(ToolType.Review);
+          if (!strategy) {
+            throw new Error("Review strategy not found");
+          }
+          
+          const result = await runDebate(
+            {
+              toolType: ToolType.Review,
+              userPrompt: instruction,
+              debateConfig: {
+                enabled: true,
+                ...debateConfig
+              }
+            },
+            async (notification) => {
+              await sendNotification({
+                method: "notifications/message",
+                params: notification
+              });
+            }
+          );
+          
+          return {
+            content: [
+              {
+                type: "text",
+                text: 'review' in result ? result.review : "Error: No review generated"
+              }
+            ],
+            metadata: {
+              meta: result.meta
+            }
+          };
+        }
+        
         // Pack the files
         const packedFiles = await packFiles(paths);
 
@@ -436,14 +560,23 @@ function createServer(): McpServer {
       rounds: z.number().optional().describe("Number of debate rounds (default: 3)"),
       maxTokens: z.number().optional().describe("Maximum token budget for the debate"),
       outputPath: z.string().optional().describe("Markdown file path to save the final plan. Will also save a full transcript to a '-full-transcript.md' suffixed file."),
+      // Legacy debate flag is still supported
+      debate: z.boolean().optional().default(false).describe("DEPRECATED - use debateConfig.enabled instead"),
+      // New debate configuration
+      debateConfig: z.object({
+        enabled: z.boolean().optional(),
+        rounds: z.number().optional(),
+        maxTotalTokens: z.number().optional(),
+        logLevel: z.enum(["warn", "info", "debug"]).optional()
+      }).optional()
+        .describe("Configuration options for the debate process")
     },
-    async ({ prompt, paths, rounds, maxTokens, outputPath }, { sendNotification }) => {
+    async ({ prompt, paths, rounds, maxTokens, outputPath, debate = false, debateConfig }, { sendNotification }) => {
       try {
         // Pack files once to reduce memory usage
         const packedFiles = await packFiles(paths);
         
         // Analyze token usage
-        const { analyzeXmlTokens } = await import("./tokenCounter");
         const tokenAnalysis = analyzeXmlTokens(packedFiles);
         
         await sendNotification({
@@ -457,58 +590,296 @@ function createServer(): McpServer {
         // Combine code context with empty prompt - the actual prompt will be handled by the debate orchestrator
         const codeContext = combinePromptWithContext(packedFiles, "");
         
-        // Create abort controller for timeout handling
-        const abortController = new AbortController();
-        const timeoutId = setTimeout(() => {
-          abortController.abort('Debate timeout exceeded');
-        }, 10 * 60 * 1000); // 10 minute default timeout
+        // Determine whether to use debate and which implementation
+        const useDebate: boolean = Boolean(debate) || Boolean(debateConfig?.enabled);
+        const useNewImplementation = true; // Set to false during transition if needed
         
-        try {
-          // Use debate orchestrator
-          const { finalPlan, logs, stats, complete } = await debate(
-            { 
-              paths, 
-              userPrompt: prompt, 
-              codeContext,
-              rounds,
-              maxTotalTokens: maxTokens,
-              outputPath,
-              abortSignal: abortController.signal 
+        // Legacy warning for 'debate' flag
+        if (Boolean(debate)) {
+          await sendNotification({
+            method: "notifications/message",
+            params: {
+              level: "warning",
+              data: "The 'debate' flag is deprecated. Please use debateConfig.enabled instead.",
             },
-            // Forward notifications
-            async (notification) => {
-              await sendNotification({
-                method: "notifications/message",
-                params: notification
-              });
+          });
+        }
+        
+        if (useDebate) {
+          if (useNewImplementation) {
+            // Use the new debate implementation
+            await sendNotification({
+              method: "notifications/message",
+              params: {
+                level: "info",
+                data: `Using new debate implementation with ${debateConfig?.rounds || rounds || 3} rounds`,
+              },
+            });
+            
+            const strategy = await getStrategy(ToolType.Plan);
+            if (!strategy) {
+              throw new Error("Plan strategy not found");
             }
+            
+            const result = await runDebate(
+              {
+                toolType: ToolType.Plan,
+                userPrompt: prompt,
+                debateConfig: {
+                  enabled: true,
+                  rounds: debateConfig?.rounds || rounds || 3,
+                  maxTotalTokens: debateConfig?.maxTotalTokens || maxTokens,
+                  logLevel: debateConfig?.logLevel || "info"
+                }
+              },
+              async (notification: { level: 'info' | 'debug' | 'warning' | 'error'; data: string }) => {
+                await sendNotification({
+                  method: "notifications/message",
+                  params: notification
+                });
+              }
+            );
+            
+            // If outputPath is provided, save the plan and full transcript
+            if (outputPath && 'finalPlan' in result) {
+              try {
+                // Ensure the directory exists
+                const outputDir = path.dirname(outputPath);
+                if (!fs.existsSync(outputDir)) {
+                  fs.mkdirSync(outputDir, { recursive: true });
+                }
+                
+                // Write the final plan to the specified file
+                fs.writeFileSync(outputPath, result.finalPlan, 'utf8');
+                await sendNotification({
+                  method: "notifications/message",
+                  params: {
+                    level: "info",
+                    data: `Successfully saved plan to: ${outputPath}`,
+                  },
+                });
+                
+                // Generate the full transcript filename by adding suffix before extension
+                if ('debateLog' in result) {
+                  const extname = path.extname(outputPath);
+                  const basename = path.basename(outputPath, extname);
+                  const dirname = path.dirname(outputPath);
+                  const transcriptPath = path.join(dirname, `${basename}-full-transcript${extname}`);
+                  
+                  // Format the full transcript with all debate details
+                  const transcriptContent = [
+                    `# Sage Plan Debate Full Transcript\n`,
+                    `## Original Request\n\n${prompt}\n\n`,
+                    `## Debate Statistics\n`,
+                    `- Total Tokens: ${result.meta.tokenUsage.prompt + result.meta.tokenUsage.completion}`,
+                    `- Warnings: ${result.meta.warnings.length}`,
+                    `- Total Time: ${Math.round(result.meta.timings.totalMs)}ms`,
+                    `- Rounds: ${result.meta.rounds}\n\n`,
+                    `## Complete Debate Log\n\n`
+                  ].join('\n');
+                  
+                  // Add the transcript entries
+                  const fullContent = transcriptContent + result.debateLog.transcript.join('\n\n-----\n\n');
+                  
+                  // Write the transcript to file
+                  fs.writeFileSync(transcriptPath, fullContent, 'utf8');
+                  await sendNotification({
+                    method: "notifications/message",
+                    params: {
+                      level: "info",
+                      data: `Successfully saved full transcript to: ${transcriptPath}`,
+                    },
+                  });
+                }
+              } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                await sendNotification({
+                  method: "notifications/message",
+                  params: {
+                    level: "error",
+                    data: `Error saving output files: ${errorMsg}`,
+                  },
+                });
+              }
+            }
+            
+            return {
+              content: [
+                { type: "text", text: 'finalPlan' in result ? result.finalPlan : "Error: No plan generated" }
+              ],
+              metadata: {
+                meta: result.meta
+              }
+            };
+          } else {
+            // Use our adapter to bridge between old and new implementation
+            await sendNotification({
+              method: "notifications/message",
+              params: {
+                level: "info",
+                data: "Using debate adapter for compatibility with legacy implementation"
+              }
+            });
+            
+            // Use the new debate implementation with the legacy adapter
+            const result = await runDebate(
+              {
+                toolType: ToolType.Plan,
+                userPrompt: prompt,
+                debateConfig: {
+                  enabled: true,
+                  rounds: typeof rounds === 'number' ? rounds : 3,
+                  maxTotalTokens: maxTokens,
+                  logLevel: "debug"
+                }
+              },
+              async (notification: { level: 'info' | 'debug' | 'warning' | 'error'; data: string }) => {
+                await sendNotification({
+                  method: "notifications/message",
+                  params: notification
+                });
+              }
+            );
+            
+            // Return the result directly
+            if (!('finalPlan' in result)) {
+              throw new Error('Failed to generate plan');
+            }
+            
+            return {
+              content: [
+                { type: "text", text: result.finalPlan }
+              ],
+              metadata: { 
+                meta: result.meta,
+                complete: result.meta.warnings.length === 0
+              }
+            };
+          }
+        } else {
+          // Non-debate mode - use single model
+          await sendNotification({
+            method: "notifications/message",
+            params: {
+              level: "info",
+              data: "Debate disabled. Using single-model inference.",
+            },
+          });
+          
+          // Create the plan prompt
+          const planPrompt = `
+          You are an expert software engineer. Create a detailed implementation plan for:
+          
+          ${prompt}
+          
+          Your plan should include:
+          1. Components/files to be created or modified
+          2. Data structures and interfaces
+          3. Key functions and their purposes
+          4. Implementation steps in priority order
+          5. Potential challenges and solutions
+          6. Testing approach
+          
+          Return the plan in Markdown format under the heading "# Implementation Plan".
+          `;
+          
+          // Combine with the code context
+          const combined = combinePromptWithContext(packedFiles, planPrompt);
+          
+          // Select model based on token count
+          const modelSelection = selectModelBasedOnTokens(combined);
+          const { modelName, modelType, tokenCount, withinLimit, tokenLimit } = modelSelection;
+          
+          if (!withinLimit) {
+            // Handle different error cases
+            let errorMsg = "";
+            
+            if (modelName === 'none' && tokenLimit === 0) {
+              // No API keys available
+              errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${O3_TOKEN_LIMIT.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens.`;
+            } else if (modelType === 'openai' && !process.env.OPENAI_API_KEY) {
+              // Missing OpenAI API key
+              errorMsg = `Error: OpenAI API key not set. This content (${tokenCount.toLocaleString()} tokens) could be processed by O3, but OPENAI_API_KEY is missing. Please set the environment variable or use a smaller context.`;
+            } else if (modelType === 'gemini' && !process.env.GEMINI_API_KEY) {
+              // Missing Gemini API key
+              errorMsg = `Error: Gemini API key not set. This content (${tokenCount.toLocaleString()} tokens) requires Gemini's larger context window, but GEMINI_API_KEY is missing. Please set the environment variable.`;
+            } else {
+              // Content exceeds all available model limits
+              errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (O3: ${O3_TOKEN_LIMIT.toLocaleString()}, Gemini: ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens). Please reduce the number of files or shorten the prompt.`;
+            }
+            
+            await sendNotification({
+              method: "notifications/message",
+              params: {
+                level: "error",
+                data: `Request blocked: ${process.env.OPENAI_API_KEY ? "O3 available. " : "O3 unavailable. "}${process.env.GEMINI_API_KEY ? "Gemini available." : "Gemini unavailable."}`,
+              },
+            });
+            
+            return {
+              content: [{ type: "text", text: errorMsg }],
+              isError: true,
+            };
+          }
+          
+          // Send to appropriate model
+          const startTime = Date.now();
+          const response = await sendToModelWithFallback(
+            combined, 
+            { modelName, modelType, tokenCount },
+            sendNotification
           );
           
-          // Format logs for readable output
-          const formattedLogs = logs.map(entry => 
-            `## Round ${entry.round} | ${entry.phase} | Model ${entry.modelId}\n\n${entry.response}\n\n`
-          ).join('\n---\n\n');
+          const elapsedTime = Date.now() - startTime;
           
           await sendNotification({
             method: "notifications/message",
             params: {
               level: "info",
-              data: `Debate completed successfully. Total tokens: ${stats.totalTokens.toLocaleString()}, Total API calls: ${stats.totalApiCalls}`,
+              data: `Received response from ${modelName} in ${elapsedTime}ms`,
             },
           });
           
+          // If outputPath is provided, save the plan
+          if (outputPath) {
+            try {
+              // Ensure the directory exists
+              const outputDir = path.dirname(outputPath);
+              if (!fs.existsSync(outputDir)) {
+                fs.mkdirSync(outputDir, { recursive: true });
+              }
+              
+              // Write the final plan to the specified file
+              fs.writeFileSync(outputPath, response, 'utf8');
+              await sendNotification({
+                method: "notifications/message",
+                params: {
+                  level: "info",
+                  data: `Successfully saved plan to: ${outputPath}`,
+                },
+              });
+            } catch (error) {
+              const errorMsg = error instanceof Error ? error.message : String(error);
+              await sendNotification({
+                method: "notifications/message",
+                params: {
+                  level: "error",
+                  data: `Error saving output file: ${errorMsg}`,
+                },
+              });
+            }
+          }
+          
           return {
             content: [
-              { type: "text", text: finalPlan }
+              { type: "text", text: response }
             ],
-            metadata: { 
-              stats,
-              complete,
-              debateRounds: logs.length > 0 ? Math.max(...logs.map(entry => entry.round)) : 0
+            metadata: {
+              singleModel: true,
+              modelName,
+              elapsedMs: elapsedTime
             }
           };
-        } finally {
-          clearTimeout(timeoutId);
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);

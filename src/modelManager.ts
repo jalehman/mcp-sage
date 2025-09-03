@@ -136,10 +136,25 @@ export async function sendToModelWithFallback(
   try {
     // Helper function to adapt our notification format to what openai.ts expects
     const notifyAdapter = async (message: {level: 'info' | 'warning' | 'error' | 'debug'; data: string}) => {
-      await sendNotification({ 
-        method: "notifications/message", 
-        params: message 
-      });
+      // Check if sendNotification is already expecting our internal format
+      if (typeof sendNotification === 'function' && sendNotification.length === 1) {
+        try {
+          // If this is the raw notification handler from debateOrchestrator
+          await sendNotification(message);
+        } catch (e) {
+          // Fall back to the wrapped format if direct call fails
+          await sendNotification({ 
+            method: "notifications/message", 
+            params: message 
+          });
+        }
+      } else {
+        // Default behavior - wrap in MCP notification format
+        await sendNotification({ 
+          method: "notifications/message", 
+          params: message 
+        });
+      }
     };
     
     if (modelType === "openai") {

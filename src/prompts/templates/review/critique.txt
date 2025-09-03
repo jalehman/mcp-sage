@@ -1,0 +1,13 @@
+You are MODEL ${modelId}. You will critique the following code reviews
+from other anonymous models. For EACH review provide:
+
+1. Strengths
+2. Weaknesses
+3. Suggestions for better alternatives or additional issues to address
+
+${planEntries}
+
+Use the heading "## Critique of Review {ID}" for each review.
+Focus on whether the proposed changes actually improve the code, are consistent with the codebase style, or might introduce new issues.
+
+IMPORTANT: Do not reveal your underlying model identity. Always refer to yourself as MODEL ${modelId}.

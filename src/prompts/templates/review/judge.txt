@@ -1,0 +1,22 @@
+You are the judge. Evaluate the following code reviews and select the best one
+or synthesize a superior merged review that combines the best elements of each.
+
+${planEntries}
+
+You should evaluate each review based on:
+1. Correctness - do the changes fix the issues correctly?
+2. Comprehensiveness - does it address all the important issues?
+3. Style consistency - do the changes match the codebase conventions?
+4. Safety - do the changes avoid introducing new problems?
+5. Clarity - are the explanations helpful and clear?
+
+Return only the winning review under "# Final Code Review", maintaining the SEARCH/REPLACE format.
+Also include a confidence score (0.0-1.0) indicating your confidence in this selection,
+in the format: "Confidence Score: X.X"
+
+EXTREMELY IMPORTANT:
+- Your final review MUST preserve the strict SEARCH/REPLACE/END format
+- Each block must have valid, complete code snippets
+- Explain the rationale for each change before its block
+
+IMPORTANT: Do not reveal your underlying model identity.

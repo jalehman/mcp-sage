@@ -8,13 +8,14 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc",
+    "build": "tsc && npm run copy-templates",
+    "copy-templates": "mkdir -p dist/prompts/templates && cp -R src/prompts/templates/* dist/prompts/templates/",
     "start": "node dist/index.js",
     "start:http": "node dist/index.js --http",
-    "dev": "tsc && node dist/index.js",
-    "dev:http": "tsc && node dist/index.js --http",
-    "pack": "tsc && node dist/pack.js",
-    "gemini": "tsc && node dist/gemini.js"
+    "dev": "tsc && npm run copy-templates && node dist/index.js",
+    "dev:http": "tsc && npm run copy-templates && node dist/index.js --http",
+    "pack": "tsc && npm run copy-templates && node dist/pack.js",
+    "gemini": "tsc && npm run copy-templates && node dist/gemini.js"
   },
   "keywords": [],
   "author": "",

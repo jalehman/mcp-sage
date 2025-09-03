@@ -43,7 +43,7 @@ export const Models = {
     costPerOutputToken: 8 / 1000000, // $8.00 per 1M output tokens
   },
   GEMINI: {
-    name: "gemini-2.5-pro-preview-03-25",
+    name: "gemini-2.5-pro-preview-05-06",
     type: "gemini" as ModelType,
     tokenLimit: 1000000,
     costPerInputToken: 2 / 1000000, // approximation; varies based on input size
