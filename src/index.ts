@@ -113,7 +113,7 @@ function createServer(): McpServer {
 
     Do not worry about context limits; feel free to include as much as you think is relevant. If you include too much it will error and tell you, and then you can include less. Err on the side of including more context.
     
-    If the user mentiones "sages" plural, or asks for a debate explicitly, enable debate mode by passing a debateConfig object with enabled set to true.
+    If the user mentiones "sages" plural, or asks for a debate explicitly, set debate to true.
     `,
     {
       prompt: z.string().describe("The prompt to send to the external model."),
@@ -122,27 +122,22 @@ function createServer(): McpServer {
         .describe(
           "Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively.",
         ),
-      debateConfig: z
-        .object({
-          enabled: z.boolean().describe("Controls whether or not debates are enabled. Set to true when the user mentiones 'sages' plural.").optional(),
-          rounds: z.number().optional(),
-          maxTotalTokens: z.number().optional(),
-          logLevel: z.enum(["warn", "info", "debug"]).optional(),
-        })
-        .describe("Configuration options for the debate process. Set `enabled` to `true` when a multi-model debate should ensue, i.e. if the user mentions 'sages' plural."),
+      debate: z
+        .boolean()
+        .describe("Set to true when a multi-model debate should ensue (e.g., when the user mentions 'sages' plural)."),
     },
-    async ({ prompt, paths, debateConfig }, { sendNotification }) => {
+    async ({ prompt, paths, debate }, { sendNotification }) => {
       try {
         // Pack the files up front - we'll need them in either case
         const packedFiles = await packFiles(paths);
 
         // Check if debate is enabled
-        if (debateConfig?.enabled) {
+        if (debate) {
           await sendNotification({
             method: "notifications/message",
             params: {
               level: "info",
-              data: `Using debate mode for sage-opinion with ${debateConfig?.rounds} rounds`,
+              data: `Using debate mode for sage-opinion`,
             },
           });
 
@@ -158,7 +153,8 @@ function createServer(): McpServer {
               codeContext: packedFiles, // Add packed files as context
               debateConfig: {
                 enabled: true,
-                ...debateConfig,
+                rounds: 1,
+                logLevel: "debug",
               },
             },
             async (notification) => {
@@ -316,25 +312,20 @@ function createServer(): McpServer {
         .describe(
           "Paths to include as context. MUST be absolute paths (e.g., /home/user/project/src). Including directories will include all files contained within recursively.",
         ),
-      debateConfig: z
-        .object({
-          enabled: z.boolean().optional(),
-          rounds: z.number().optional(),
-          maxTotalTokens: z.number().optional(),
-          logLevel: z.enum(["warn", "info", "debug"]).optional(),
-        })
+      debate: z
+        .boolean()
         .optional()
-        .describe("Configuration options for the debate process"),
+        .describe("Set to true when a multi-model debate should ensue"),
     },
-    async ({ instruction, paths, debateConfig }, { sendNotification }) => {
+    async ({ instruction, paths, debate }, { sendNotification }) => {
       try {
         // Check if debate is enabled
-        if (debateConfig?.enabled) {
+        if (debate) {
           await sendNotification({
             method: "notifications/message",
             params: {
               level: "info",
-              data: `Using debate mode for sage-review with ${debateConfig?.rounds || 2} rounds`,
+              data: `Using debate mode for sage-review`,
             },
           });
 
@@ -349,7 +340,8 @@ function createServer(): McpServer {
               userPrompt: instruction,
               debateConfig: {
                 enabled: true,
-                ...debateConfig,
+                rounds: 1,
+                logLevel: "debug",
               },
             },
             async (notification) => {

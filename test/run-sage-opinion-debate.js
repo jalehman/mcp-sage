@@ -122,10 +122,7 @@ setTimeout(() => {
                   prompt:
                     "Explain how the code in test/complex.js works in a concise summary",
                   paths: ["test/complex.js"],
-                  debateConfig: {
-                    enabled: true, // Enable debate functionality
-                    logLevel: "debug",
-                  },
+                  debate: true, // Enable debate functionality
                 },
               },
             };

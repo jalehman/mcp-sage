@@ -99,18 +99,7 @@ export function selectModelBasedOnTokens(combined: string): ModelSelection {
     };
   }
 
-  // Then try GPT-4.1 if available and within limits
-  if (tokenCount <= Models.GPT41.tokenLimit && hasOpenAiKey) {
-    return {
-      modelName: Models.GPT41.name,
-      modelType: Models.GPT41.type,
-      tokenCount,
-      withinLimit: true,
-      tokenLimit: Models.GPT41.tokenLimit,
-    };
-  }
-
-  // Fallback to Gemini when it fits and key is available
+  // Then try Gemini when it fits and key is available
   if (tokenCount <= Models.GEMINI.tokenLimit && hasGeminiKey) {
     return {
       modelName: Models.GEMINI.name,
@@ -118,6 +107,17 @@ export function selectModelBasedOnTokens(combined: string): ModelSelection {
       tokenCount,
       withinLimit: true,
       tokenLimit: Models.GEMINI.tokenLimit,
+    };
+  }
+
+  // Finally fallback to GPT-4.1 if available and within limits
+  if (tokenCount <= Models.GPT41.tokenLimit && hasOpenAiKey) {
+    return {
+      modelName: Models.GPT41.name,
+      modelType: Models.GPT41.type,
+      tokenCount,
+      withinLimit: true,
+      tokenLimit: Models.GPT41.tokenLimit,
     };
   }
 
