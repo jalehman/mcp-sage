@@ -22,7 +22,7 @@ import {
   getAvailableModels,
   sendToModelWithFallback,
 } from "../modelManager";
-import { OPUS41_MODEL_NAME } from "../modelDefinitions";
+import { getToolConfig, getModelById } from "../modelConfig";
 
 // Type for notification function passed from MCP
 export type NotificationFn = (notification: {
@@ -224,8 +224,8 @@ export async function runDebate(
     }
   };
 
-  // Determine available models
-  const availableModels = getAvailableModels().filter((m) => m.available);
+  // Determine available models based on tool type
+  const availableModels = getAvailableModels(options.toolType).filter((m) => m.available);
   if (availableModels.length === 0) {
     throw new Error(
       "No models available. Please set either OPENAI_API_KEY or GEMINI_API_KEY environment variables.",
@@ -612,17 +612,23 @@ export async function runDebate(
       data: "Judge phase: Selecting the best candidate...",
     });
 
-    // Select the judge model - use Claude Opus 4.1 if Anthropic API key is available, 
-    // otherwise fallback to first debate model
-    const hasAnthropicKey = !!process.env.ANTHROPIC_API_KEY;
-    const judgeModelName = hasAnthropicKey 
-      ? OPUS41_MODEL_NAME 
-      : debateModels[0];
-    const judgeModelType = judgeModelName.includes("gemini")
-      ? "gemini"
-      : judgeModelName.includes("claude")
-      ? "anthropic"
-      : "openai";
+    // Get judge model from configuration
+    const toolConfig = getToolConfig(options.toolType);
+    const judgeModel = getModelById(toolConfig.judgeModel);
+    
+    // Check if we have the API key for the judge model
+    const hasJudgeKey = judgeModel && (
+      (judgeModel.type === 'anthropic' && !!process.env.ANTHROPIC_API_KEY) ||
+      (judgeModel.type === 'openai' && !!process.env.OPENAI_API_KEY) ||
+      (judgeModel.type === 'gemini' && !!process.env.GEMINI_API_KEY)
+    );
+    
+    const judgeModelName = hasJudgeKey && judgeModel
+      ? judgeModel.name 
+      : debateModels[0]; // Fallback to first debate model if judge unavailable
+    const judgeModelType = judgeModel && hasJudgeKey
+      ? judgeModel.type
+      : availableModels[0].type;
 
     // Create the judge prompt
     const judgePrompt = strategy.getPrompt("judge", debateContext);

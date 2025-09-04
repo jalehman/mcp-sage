@@ -16,10 +16,8 @@ import { packFilesSync } from "./pack";
 import {
   selectModelBasedOnTokens,
   sendToModelWithFallback,
-  GEMINI_TOKEN_LIMIT,
-  GPT5_TOKEN_LIMIT,
-  O3_TOKEN_LIMIT,
 } from "./modelManager";
+import { getModelById } from "./modelConfig";
 
 // Import strategy registry
 import { getStrategy } from "./strategies/registry";
@@ -69,19 +67,6 @@ ${prompt}
 `;
 }
 
-/**
- * Checks if the combined content is within a given token limit.
- * @param combined - The combined prompt with context
- * @param limit - The token limit to check against (defaults to Gemini's limit)
- * @returns Whether the content is within limits
- */
-function isWithinTokenLimit(
-  combined: string,
-  limit: number = GEMINI_TOKEN_LIMIT,
-): boolean {
-  const tokenAnalysis = analyzeXmlTokens(combined);
-  return tokenAnalysis.totalTokens <= limit;
-}
 
 /**
  * Creates the MCP server with the sage tool
@@ -189,7 +174,7 @@ function createServer(): McpServer {
         const combined = combinePromptWithContext(packedFiles, prompt);
 
         // Select model based on token count and get token information
-        const modelSelection = selectModelBasedOnTokens(combined);
+        const modelSelection = selectModelBasedOnTokens(combined, 'opinion');
         const { modelName, modelType, tokenCount, withinLimit, tokenLimit } =
           modelSelection;
 
@@ -216,23 +201,33 @@ function createServer(): McpServer {
 
           if (modelName === "none" && tokenLimit === 0) {
             // No API keys available
-            errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${GPT5_TOKEN_LIMIT.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens.`;
+            // Get token limits from config for error message
+            const gpt5Model = getModelById('gpt5');
+            const geminiModel = getModelById('gemini25pro');
+            const gpt5Limit = gpt5Model ? gpt5Model.tokenLimit : 400000;
+            const geminiLimit = geminiModel ? geminiModel.tokenLimit : 1000000;
+            errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${gpt5Limit.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${geminiLimit.toLocaleString()} tokens.`;
           } else if (modelType === "openai" && !process.env.OPENAI_API_KEY) {
             // Missing OpenAI API key
-            errorMsg = `Error: OpenAI API key not set. This content (${tokenCount.toLocaleString()} tokens) could be processed by O3, but OPENAI_API_KEY is missing. Please set the environment variable or use a smaller context.`;
+            errorMsg = `Error: OpenAI API key not set. This content (${tokenCount.toLocaleString()} tokens) could be processed by GPT-5, but OPENAI_API_KEY is missing. Please set the environment variable or use a smaller context.`;
           } else if (modelType === "gemini" && !process.env.GEMINI_API_KEY) {
             // Missing Gemini API key
             errorMsg = `Error: Gemini API key not set. This content (${tokenCount.toLocaleString()} tokens) requires Gemini's larger context window, but GEMINI_API_KEY is missing. Please set the environment variable.`;
           } else {
             // Content exceeds all available model limits
-            errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (O3: ${GPT5_TOKEN_LIMIT.toLocaleString()}, Gemini: ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens). Please reduce the number of files or shorten the prompt.`;
+            // Get token limits from config for error message
+            const gpt5Model = getModelById('gpt5');
+            const geminiModel = getModelById('gemini25pro');
+            const gpt5Limit = gpt5Model ? gpt5Model.tokenLimit : 400000;
+            const geminiLimit = geminiModel ? geminiModel.tokenLimit : 1000000;
+            errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (GPT-5: ${gpt5Limit.toLocaleString()}, Gemini: ${geminiLimit.toLocaleString()} tokens). Please reduce the number of files or shorten the prompt.`;
           }
 
           await sendNotification({
             method: "notifications/message",
             params: {
               level: "error",
-              data: `Request blocked: ${process.env.OPENAI_API_KEY ? "O3 available. " : "O3 unavailable. "}${process.env.GEMINI_API_KEY ? "Gemini available." : "Gemini unavailable."}`,
+              data: `Request blocked: ${process.env.OPENAI_API_KEY ? "OpenAI API available. " : "OpenAI API unavailable. "}${process.env.GEMINI_API_KEY ? "Gemini available." : "Gemini unavailable."}`,
             },
           });
 
@@ -438,7 +433,7 @@ function createServer(): McpServer {
         );
 
         // Select model based on token count and get token information
-        const modelSelection = selectModelBasedOnTokens(combined);
+        const modelSelection = selectModelBasedOnTokens(combined, 'review');
         const { modelName, modelType, tokenCount, withinLimit, tokenLimit } =
           modelSelection;
 
@@ -465,23 +460,33 @@ function createServer(): McpServer {
 
           if (modelName === "none" && tokenLimit === 0) {
             // No API keys available
-            errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${GPT5_TOKEN_LIMIT.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens.`;
+            // Get token limits from config for error message
+            const gpt5Model = getModelById('gpt5');
+            const geminiModel = getModelById('gemini25pro');
+            const gpt5Limit = gpt5Model ? gpt5Model.tokenLimit : 400000;
+            const geminiLimit = geminiModel ? geminiModel.tokenLimit : 1000000;
+            errorMsg = `Error: No API keys available. Please set OPENAI_API_KEY for contexts up to ${gpt5Limit.toLocaleString()} tokens or GEMINI_API_KEY for contexts up to ${geminiLimit.toLocaleString()} tokens.`;
           } else if (modelType === "openai" && !process.env.OPENAI_API_KEY) {
             // Missing OpenAI API key
-            errorMsg = `Error: OpenAI API key not set. This content (${tokenCount.toLocaleString()} tokens) could be processed by O3, but OPENAI_API_KEY is missing. Please set the environment variable or use a smaller context.`;
+            errorMsg = `Error: OpenAI API key not set. This content (${tokenCount.toLocaleString()} tokens) could be processed by GPT-5, but OPENAI_API_KEY is missing. Please set the environment variable or use a smaller context.`;
           } else if (modelType === "gemini" && !process.env.GEMINI_API_KEY) {
             // Missing Gemini API key
             errorMsg = `Error: Gemini API key not set. This content (${tokenCount.toLocaleString()} tokens) requires Gemini's larger context window, but GEMINI_API_KEY is missing. Please set the environment variable.`;
           } else {
             // Content exceeds all available model limits
-            errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (O3: ${GPT5_TOKEN_LIMIT.toLocaleString()}, Gemini: ${GEMINI_TOKEN_LIMIT.toLocaleString()} tokens). Please reduce the number of files or shorten the instruction.`;
+            // Get token limits from config for error message
+            const gpt5Model = getModelById('gpt5');
+            const geminiModel = getModelById('gemini25pro');
+            const gpt5Limit = gpt5Model ? gpt5Model.tokenLimit : 400000;
+            const geminiLimit = geminiModel ? geminiModel.tokenLimit : 1000000;
+            errorMsg = `Error: The combined content (${tokenCount.toLocaleString()} tokens) exceeds the maximum token limit for all available models (GPT-5: ${gpt5Limit.toLocaleString()}, Gemini: ${geminiLimit.toLocaleString()} tokens). Please reduce the number of files or shorten the instruction.`;
           }
 
           await sendNotification({
             method: "notifications/message",
             params: {
               level: "error",
-              data: `Request blocked: ${process.env.OPENAI_API_KEY ? "O3 available. " : "O3 unavailable. "}${process.env.GEMINI_API_KEY ? "Gemini available." : "Gemini unavailable."}`,
+              data: `Request blocked: ${process.env.OPENAI_API_KEY ? "OpenAI API available. " : "OpenAI API unavailable. "}${process.env.GEMINI_API_KEY ? "Gemini available." : "Gemini unavailable."}`,
             },
           });
 

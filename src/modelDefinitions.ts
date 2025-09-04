@@ -1,10 +1,11 @@
 /**
  * Model Definitions
  *
- * Central repository for model constants and type definitions.
- * This module contains no logic, only definitions, so it can be
- * imported by any module without creating circular dependencies.
+ * This module now serves as a bridge to the YAML configuration.
+ * All model definitions are loaded from models.yaml.
  */
+
+import { loadModelConfig, getModelById } from './modelConfig';
 
 /**
  * Model type definition
@@ -25,52 +26,61 @@ export interface ModelConfig {
 }
 
 /**
- * Centralized model registry
+ * Get Models object from configuration
+ * This provides backward compatibility for existing code
  */
-export const Models = {
-  O3: {
-    name: "o3-2025-04-16",
-    type: "openai" as ModelType,
-    tokenLimit: 200000,
-    costPerInputToken: 10 / 1000000, // $10.00 per 1M input tokens
-    costPerOutputToken: 40 / 1000000, // $40.00 per 1M output tokens
-  },
-  GPT41: {
-    name: "gpt-4.1-2025-04-14",
-    type: "openai" as ModelType,
-    tokenLimit: 1047576, // ~1M tokens context window (exact 1,047,576)
-    costPerInputToken: 2 / 1000000, // $2.00 per 1M input tokens
-    costPerOutputToken: 8 / 1000000, // $8.00 per 1M output tokens
-  },
-  GEMINI: {
-    name: "gemini-2.5-pro",
-    type: "gemini" as ModelType,
-    tokenLimit: 1000000,
-    costPerInputToken: 2 / 1000000, // approximation; varies based on input size
-    costPerOutputToken: 12 / 1000000, // approximation; varies based on input size
-  },
-  GPT5: {
-    name: "gpt-5-2025-08-07",
-    type: "openai" as ModelType,
-    tokenLimit: 400000,
-    costPerInputToken: 1.25 / 1000000,
-    costPerOutputToken: 10 / 1000000,
-  },
-  OPUS41: {
-    name: "claude-opus-4-1-20250805",
-    type: "anthropic" as ModelType,
-    tokenLimit: 200000,
-    costPerInputToken: 15 / 1000000, // $15.00 per 1M input tokens
-    costPerOutputToken: 75 / 1000000, // $75.00 per 1M output tokens
-  },
-};
+function getModels(): Record<string, ModelConfig> {
+  const config = loadModelConfig();
+  const models: Record<string, ModelConfig> = {};
+  
+  // Map from config format to legacy format
+  for (const [id, modelDef] of Object.entries(config.models)) {
+    models[id.toUpperCase()] = {
+      name: modelDef.name,
+      type: modelDef.type,
+      tokenLimit: modelDef.tokenLimit,
+      costPerInputToken: modelDef.costPerInputToken,
+      costPerOutputToken: modelDef.costPerOutputToken,
+    };
+  }
+  
+  return models;
+}
 
-// Constants for backward compatibility
-export const O3_MODEL_NAME = Models.O3.name;
-export const O3_TOKEN_LIMIT = Models.O3.tokenLimit;
-export const GPT5_MODEL_NAME = Models.GPT5.name;
-export const GPT5_TOKEN_LIMIT = Models.GPT5.tokenLimit;
-export const GEMINI_MODEL_NAME = Models.GEMINI.name;
-export const GEMINI_TOKEN_LIMIT = Models.GEMINI.tokenLimit;
-export const OPUS41_MODEL_NAME = Models.OPUS41.name;
-export const OPUS41_TOKEN_LIMIT = Models.OPUS41.tokenLimit;
+/**
+ * Centralized model registry - loaded from YAML
+ */
+export const Models = getModels();
+
+/**
+ * Helper function to get model by ID from YAML config
+ */
+export function getModel(modelId: string): ModelConfig | undefined {
+  const modelDef = getModelById(modelId.toLowerCase());
+  if (!modelDef) return undefined;
+  
+  return {
+    name: modelDef.name,
+    type: modelDef.type,
+    tokenLimit: modelDef.tokenLimit,
+    costPerInputToken: modelDef.costPerInputToken,
+    costPerOutputToken: modelDef.costPerOutputToken,
+  };
+}
+
+// These exports maintain backward compatibility but should be phased out
+// They will throw errors if the models don't exist in the YAML
+function getModelConstant(modelId: string, field: 'name' | 'tokenLimit'): string | number {
+  const model = getModelById(modelId);
+  if (!model) {
+    throw new Error(`Model '${modelId}' not found in models.yaml`);
+  }
+  return field === 'name' ? model.name : model.tokenLimit;
+}
+
+export const GPT5_MODEL_NAME = getModelConstant('gpt5', 'name') as string;
+export const GPT5_TOKEN_LIMIT = getModelConstant('gpt5', 'tokenLimit') as number;
+export const GEMINI_MODEL_NAME = getModelConstant('gemini25pro', 'name') as string;
+export const GEMINI_TOKEN_LIMIT = getModelConstant('gemini25pro', 'tokenLimit') as number;
+export const OPUS41_MODEL_NAME = getModelConstant('opus41', 'name') as string;
+export const OPUS41_TOKEN_LIMIT = getModelConstant('opus41', 'tokenLimit') as number;

@@ -4,34 +4,11 @@ import { analyzeXmlTokens } from "./tokenCounter";
 import { sendGeminiPrompt } from "./gemini";
 import { sendOpenAiPrompt } from "./openai";
 import { sendAnthropicPrompt } from "./anthropic";
-import {
-  ModelType,
-  ModelConfig,
-  Models,
-  O3_MODEL_NAME,
-  O3_TOKEN_LIMIT,
-  GPT5_MODEL_NAME,
-  GPT5_TOKEN_LIMIT,
-  GEMINI_MODEL_NAME,
-  GEMINI_TOKEN_LIMIT,
-  OPUS41_MODEL_NAME,
-  OPUS41_TOKEN_LIMIT,
-} from "./modelDefinitions";
+import { ModelType, ModelConfig } from "./modelDefinitions";
+import { getModelById, getToolConfig, getDefaults } from "./modelConfig";
 
-// Re-export model types and definitions for convenience
-export {
-  ModelType,
-  ModelConfig,
-  Models,
-  O3_MODEL_NAME,
-  O3_TOKEN_LIMIT,
-  GPT5_MODEL_NAME,
-  GPT5_TOKEN_LIMIT,
-  GEMINI_MODEL_NAME,
-  GEMINI_TOKEN_LIMIT,
-  OPUS41_MODEL_NAME,
-  OPUS41_TOKEN_LIMIT,
-};
+// Re-export model types for convenience
+export { ModelType, ModelConfig };
 
 /**
  * Model selection result
@@ -56,26 +33,38 @@ export interface ModelSelection {
 }
 
 /**
- * Get available models with their capabilities
+ * Get available models for debate participation
  */
-export function getAvailableModels(): ModelConfig[] {
+export function getAvailableModels(toolType: 'opinion' | 'review' = 'opinion'): ModelConfig[] {
   const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
   const hasGeminiKey = !!process.env.GEMINI_API_KEY;
+  const hasAnthropicKey = !!process.env.ANTHROPIC_API_KEY;
 
+  const toolConfig = getToolConfig(toolType);
   const availableModels: ModelConfig[] = [];
 
-  if (hasOpenAiKey) {
-    availableModels.push({ ...Models.GPT5, available: true });
+  // Only include models that are configured as debate participants
+  for (const modelId of toolConfig.debateParticipants) {
+    const model = getModelById(modelId);
+    if (!model) continue;
+    
+    // Check if we have the required API key
+    const hasKey = 
+      (model.type === 'openai' && hasOpenAiKey) ||
+      (model.type === 'gemini' && hasGeminiKey) ||
+      (model.type === 'anthropic' && hasAnthropicKey);
+    
+    if (hasKey) {
+      availableModels.push({
+        name: model.name,
+        type: model.type,
+        tokenLimit: model.tokenLimit,
+        costPerInputToken: model.costPerInputToken,
+        costPerOutputToken: model.costPerOutputToken,
+        available: true,
+      });
+    }
   }
-
-  if (hasGeminiKey) {
-    availableModels.push({ ...Models.GEMINI, available: true });
-  }
-
-  // TODO: but what if I want it as a participant? Best behavior is having the judging model not be a participant. How to encode that?
-
-  // Note: Claude Opus 4.1 is not included here as it's only used for judging,
-  // not as a debate participant
 
   return availableModels;
 }
@@ -83,80 +72,58 @@ export function getAvailableModels(): ModelConfig[] {
 /*----------------------------------------------------------------------------
   Model‑selection helper
 ----------------------------------------------------------------------------*/
-export function selectModelBasedOnTokens(combined: string): ModelSelection {
+export function selectModelBasedOnTokens(
+  combined: string,
+  toolType: 'opinion' | 'review' = 'opinion'
+): ModelSelection {
   const { totalTokens: tokenCount } = analyzeXmlTokens(combined);
   const hasOpenAiKey = !!process.env.OPENAI_API_KEY;
   const hasGeminiKey = !!process.env.GEMINI_API_KEY;
+  const hasAnthropicKey = !!process.env.ANTHROPIC_API_KEY;
 
-  // First try GPT5 (preferred for smaller contexts)
-  if (tokenCount <= Models.GPT5.tokenLimit && hasOpenAiKey) {
-    return {
-      modelName: Models.GPT5.name,
-      modelType: Models.GPT5.type,
-      tokenCount,
-      withinLimit: true,
-      tokenLimit: Models.GPT5.tokenLimit,
-    };
-  }
-
-  // Then try Gemini when it fits and key is available
-  if (tokenCount <= Models.GEMINI.tokenLimit && hasGeminiKey) {
-    return {
-      modelName: Models.GEMINI.name,
-      modelType: Models.GEMINI.type,
-      tokenCount,
-      withinLimit: true,
-      tokenLimit: Models.GEMINI.tokenLimit,
-    };
-  }
-
-  // Finally fallback to GPT-4.1 if available and within limits
-  if (tokenCount <= Models.GPT41.tokenLimit && hasOpenAiKey) {
-    return {
-      modelName: Models.GPT41.name,
-      modelType: Models.GPT41.type,
-      tokenCount,
-      withinLimit: true,
-      tokenLimit: Models.GPT41.tokenLimit,
-    };
+  const toolConfig = getToolConfig(toolType);
+  
+  // Try models in the preferred order specified in config
+  for (const modelId of toolConfig.preferredModels) {
+    const model = getModelById(modelId);
+    if (!model) continue;
+    
+    // Check if we have the required API key
+    const hasKey = 
+      (model.type === 'openai' && hasOpenAiKey) ||
+      (model.type === 'gemini' && hasGeminiKey) ||
+      (model.type === 'anthropic' && hasAnthropicKey);
+    
+    // Check if model fits within token limit
+    if (hasKey && tokenCount <= model.tokenLimit) {
+      return {
+        modelName: model.name,
+        modelType: model.type,
+        tokenCount,
+        withinLimit: true,
+        tokenLimit: model.tokenLimit,
+      };
+    }
   }
 
-  /* — Error branches — */
-  if (!hasOpenAiKey && !hasGeminiKey) {
-    return {
-      modelName: "none",
-      modelType: "gemini",
-      tokenCount,
-      withinLimit: false,
-      tokenLimit: 0,
-    };
-  }
-  if (!hasOpenAiKey && tokenCount <= Models.GPT5.tokenLimit) {
-    return {
-      modelName: "none",
-      modelType: "openai",
-      tokenCount,
-      withinLimit: false,
-      tokenLimit: Models.GPT5.tokenLimit,
-    };
-  }
-  if (!hasGeminiKey && tokenCount > Models.GPT5.tokenLimit) {
-    return {
-      modelName: "none",
-      modelType: "gemini",
-      tokenCount,
-      withinLimit: false,
-      tokenLimit: Models.GEMINI.tokenLimit,
-    };
+  // If no model fits, return error with largest available limit
+  let largestLimit = 0;
+  let failureType: ModelType = 'openai';
+  
+  for (const modelId of toolConfig.preferredModels) {
+    const model = getModelById(modelId);
+    if (model && model.tokenLimit > largestLimit) {
+      largestLimit = model.tokenLimit;
+      failureType = model.type;
+    }
   }
 
-  /* Exhausted all limits */
   return {
     modelName: "none",
-    modelType: "gemini",
+    modelType: failureType,
     tokenCount,
     withinLimit: false,
-    tokenLimit: Models.GEMINI.tokenLimit,
+    tokenLimit: largestLimit,
   };
 }
 
@@ -257,7 +224,7 @@ export async function sendToModelWithFallback(
     if (
       modelType === "openai" &&
       hasGeminiKey &&
-      tokenCount <= Models.GEMINI.tokenLimit &&
+      tokenCount <= 1000000 && // Gemini's typical limit
       error instanceof Error &&
       error.message.includes("OpenAI API unreachable")
     ) {
@@ -275,7 +242,10 @@ export async function sendToModelWithFallback(
           data: `Sending request to Gemini with ${tokenCount.toLocaleString()} tokens…`,
         },
       });
-      return await sendGeminiPrompt(combined, {}, abortSignal, notifyAdapter);
+      // Use Gemini as fallback - get the model name from config
+      const geminiModel = getModelById('gemini25pro');
+      const modelName = geminiModel ? geminiModel.name : 'gemini-2.5-pro';
+      return await sendGeminiPrompt(combined, { model: modelName }, abortSignal, notifyAdapter);
     }
 
     // Other model-specific fallbacks could be added here

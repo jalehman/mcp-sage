@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { O3_MODEL_NAME } from "./modelDefinitions";
+import { GPT5_MODEL_NAME } from "./modelDefinitions";
 
 /**
  * Creates a fresh OpenAI client instance for each request
@@ -80,7 +80,7 @@ export async function sendOpenAiPrompt(
   if (notifyFn) {
     await notifyFn({
       level: "debug",
-      data: `Starting sendOpenAiPrompt with model: ${options.model || O3_MODEL_NAME}`,
+      data: `Starting sendOpenAiPrompt with model: ${options.model || GPT5_MODEL_NAME}`,
     });
     await notifyFn({
       level: "debug",
@@ -89,7 +89,7 @@ export async function sendOpenAiPrompt(
   }
 
   const client = getOpenaiClient();
-  const model = options.model || O3_MODEL_NAME;
+  const model = options.model || GPT5_MODEL_NAME;
 
   // Maximum retry attempts
   const maxRetries = 3;

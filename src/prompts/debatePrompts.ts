@@ -108,7 +108,7 @@ IMPORTANT: Do not reveal your underlying model identity. Always refer to yoursel
 }
 
 /**
- * Judge prompt - asks a model (typically O3) to select or synthesize the best plan
+ * Judge prompt - asks a model to select or synthesize the best plan
  */
 export function judgePrompt(plans: Record<string, string>): string {
   const planEntries = Object.entries(plans)

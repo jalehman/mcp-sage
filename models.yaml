@@ -1,0 +1,76 @@
+# Model Configuration for MCP Sage
+# This file defines all available models and their configurations
+
+# Model Registry - Define all available models here
+models:
+  gpt5:
+    name: "gpt-5-2025-08-07"
+    type: "openai"
+    tokenLimit: 400000
+    costPerInputToken: 0.00000125  # $1.25 per 1M tokens
+    costPerOutputToken: 0.00001     # $10.00 per 1M tokens
+  
+  gpt41:
+    name: "gpt-4.1-2025-04-14"
+    type: "openai"
+    tokenLimit: 1047576  # ~1M tokens
+    costPerInputToken: 0.000002     # $2.00 per 1M tokens
+    costPerOutputToken: 0.000008    # $8.00 per 1M tokens
+  
+  gemini25pro:
+    name: "gemini-2.5-pro"
+    type: "gemini"
+    tokenLimit: 1000000
+    costPerInputToken: 0.000002     # $2.00 per 1M tokens (approximation)
+    costPerOutputToken: 0.000012    # $12.00 per 1M tokens (approximation)
+  
+  opus41:
+    name: "claude-opus-4-1-20250805"
+    type: "anthropic"
+    tokenLimit: 200000
+    costPerInputToken: 0.000015     # $15.00 per 1M tokens
+    costPerOutputToken: 0.000075    # $75.00 per 1M tokens
+
+# Tool-specific configurations
+tools:
+  opinion:
+    # Models that can participate in debates
+    debateParticipants:
+      - gpt5
+      - gemini25pro
+    
+    # Model to use as judge in debates
+    judgeModel: opus41
+    
+    # Priority order for non-debate mode (subject to token constraints)
+    # First model that fits token limit will be used
+    preferredModels:
+      - gpt5        # First choice for ≤400K tokens
+      - gemini25pro # Second choice for ≤1M tokens
+      - gpt41       # Fallback for ≤1M tokens
+  
+  review:
+    # Models that can participate in debates
+    debateParticipants:
+      - gpt5
+      - gemini25pro
+    
+    # Model to use as judge in debates
+    judgeModel: opus41
+    
+    # Priority order for non-debate mode (subject to token constraints)
+    preferredModels:
+      - gpt5        # First choice for ≤400K tokens
+      - gemini25pro # Second choice for ≤1M tokens
+      - gpt41       # Fallback for ≤1M tokens
+
+# Default settings
+defaults:
+  # Maximum tokens to use for model output
+  maxOutputTokens: 32768
+  
+  # Temperature for model responses
+  temperature: 0
+  
+  # Enable model fallback on API errors
+  enableFallback: true
