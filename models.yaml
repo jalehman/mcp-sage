@@ -74,3 +74,9 @@ defaults:
   
   # Enable model fallback on API errors
   enableFallback: true
+  
+  # Default model per provider (used when no specific model is provided)
+  providerModels:
+    openai: gpt5
+    gemini: gemini25pro
+    anthropic: opus41

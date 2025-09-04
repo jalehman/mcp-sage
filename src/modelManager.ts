@@ -128,9 +128,9 @@ export function selectModelBasedOnTokens(
 }
 
 /*----------------------------------------------------------------------------
-  Fallback‑aware dispatcher
+  Model dispatcher
 ----------------------------------------------------------------------------*/
-export async function sendToModelWithFallback(
+export async function sendToModel(
   combined: string,
   {
     modelName,
@@ -217,39 +217,7 @@ export async function sendToModelWithFallback(
       notifyAdapter,
     );
   } catch (error) {
-    /* Network‑level fallback logic */
-    const hasGeminiKey = !!process.env.GEMINI_API_KEY;
-
-    // OpenAI to Gemini fallback
-    if (
-      modelType === "openai" &&
-      hasGeminiKey &&
-      tokenCount <= 1000000 && // Gemini's typical limit
-      error instanceof Error &&
-      error.message.includes("OpenAI API unreachable")
-    ) {
-      await sendNotification({
-        method: "notifications/message",
-        params: {
-          level: "warning",
-          data: "OpenAI API unreachable. Falling back to Gemini…",
-        },
-      });
-      await sendNotification({
-        method: "notifications/message",
-        params: {
-          level: "info",
-          data: `Sending request to Gemini with ${tokenCount.toLocaleString()} tokens…`,
-        },
-      });
-      // Use Gemini as fallback - get the model name from config
-      const geminiModel = getModelById('gemini25pro');
-      const modelName = geminiModel ? geminiModel.name : 'gemini-2.5-pro';
-      return await sendGeminiPrompt(combined, { model: modelName }, abortSignal, notifyAdapter);
-    }
-
-    // Other model-specific fallbacks could be added here
-
+    // Re-throw the error - no automatic fallbacks
     throw error;
   }
 }

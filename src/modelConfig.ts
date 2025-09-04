@@ -37,6 +37,11 @@ export interface DefaultSettings {
   maxOutputTokens: number;
   temperature: number;
   enableFallback: boolean;
+  providerModels?: {
+    openai?: string;
+    gemini?: string;
+    anthropic?: string;
+  };
 }
 
 /**
@@ -153,6 +158,14 @@ export function getDefaults(): DefaultSettings {
 export function getAllModelIds(): string[] {
   const config = loadModelConfig();
   return Object.keys(config.models);
+}
+
+/**
+ * Get default model for a provider
+ */
+export function getProviderDefaultModel(provider: 'openai' | 'gemini' | 'anthropic'): string | undefined {
+  const config = loadModelConfig();
+  return config.defaults?.providerModels?.[provider];
 }
 
 /**

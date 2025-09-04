@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { OPUS41_MODEL_NAME } from "./modelDefinitions";
+import { getProviderDefaultModel, getModelById } from "./modelConfig";
 
 /**
  * Creates a fresh Anthropic client instance for each request
@@ -51,7 +51,7 @@ export async function sendAnthropicPrompt(
   if (notifyFn) {
     await notifyFn({
       level: "debug",
-      data: `[DEBUG-Anthropic] Starting sendAnthropicPrompt with model: ${options.model || OPUS41_MODEL_NAME}`,
+      data: `[DEBUG-Anthropic] Starting sendAnthropicPrompt with model: ${options.model || getDefaultAnthropicModel()}`,
     });
     await notifyFn({
       level: "debug",
@@ -60,7 +60,7 @@ export async function sendAnthropicPrompt(
   }
 
   const client = getAnthropicClient();
-  const model = options.model || OPUS41_MODEL_NAME;
+  const model = options.model || getDefaultAnthropicModel();
 
   // Maximum retry attempts
   const maxRetries = 3;
@@ -150,4 +150,19 @@ export async function sendAnthropicPrompt(
   }
 
   throw new Error("Max retries exceeded for Anthropic API call");
+}
+
+/**
+ * Get the default Anthropic model from configuration
+ */
+function getDefaultAnthropicModel(): string {
+  const defaultModelId = getProviderDefaultModel('anthropic');
+  if (!defaultModelId) {
+    throw new Error('No default Anthropic model configured in models.yaml');
+  }
+  const model = getModelById(defaultModelId);
+  if (!model) {
+    throw new Error(`Default Anthropic model '${defaultModelId}' not found in models.yaml`);
+  }
+  return model.name;
 }

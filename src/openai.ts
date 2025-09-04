@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { GPT5_MODEL_NAME } from "./modelDefinitions";
+import { getProviderDefaultModel, getModelById } from "./modelConfig";
 
 /**
  * Creates a fresh OpenAI client instance for each request
@@ -80,7 +80,7 @@ export async function sendOpenAiPrompt(
   if (notifyFn) {
     await notifyFn({
       level: "debug",
-      data: `Starting sendOpenAiPrompt with model: ${options.model || GPT5_MODEL_NAME}`,
+      data: `Starting sendOpenAiPrompt with model: ${options.model || getDefaultOpenAIModel()}`,
     });
     await notifyFn({
       level: "debug",
@@ -89,7 +89,7 @@ export async function sendOpenAiPrompt(
   }
 
   const client = getOpenaiClient();
-  const model = options.model || GPT5_MODEL_NAME;
+  const model = options.model || getDefaultOpenAIModel();
 
   // Maximum retry attempts
   const maxRetries = 3;
@@ -225,4 +225,19 @@ export async function sendOpenAiPrompt(
       throw error;
     }
   }
+}
+
+/**
+ * Get the default OpenAI model from configuration
+ */
+function getDefaultOpenAIModel(): string {
+  const defaultModelId = getProviderDefaultModel('openai');
+  if (!defaultModelId) {
+    throw new Error('No default OpenAI model configured in models.yaml');
+  }
+  const model = getModelById(defaultModelId);
+  if (!model) {
+    throw new Error(`Default OpenAI model '${defaultModelId}' not found in models.yaml`);
+  }
+  return model.name;
 }

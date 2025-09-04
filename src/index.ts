@@ -15,7 +15,7 @@ import { packFilesSync } from "./pack";
 // Import shared functions from gemini.ts and openai.ts
 import {
   selectModelBasedOnTokens,
-  sendToModelWithFallback,
+  sendToModel,
 } from "./modelManager";
 import { getModelById } from "./modelConfig";
 
@@ -239,7 +239,7 @@ function createServer(): McpServer {
 
         // Send to appropriate model based on selection with fallback capability
         const startTime = Date.now();
-        const response = await sendToModelWithFallback(
+        const response = await sendToModel(
           combined,
           { modelName, modelType, tokenCount },
           sendNotification,
@@ -498,7 +498,7 @@ function createServer(): McpServer {
 
         // Send to appropriate model based on selection with fallback capability
         const startTime = Date.now();
-        const response = await sendToModelWithFallback(
+        const response = await sendToModel(
           combined,
           { modelName, modelType, tokenCount },
           sendNotification,

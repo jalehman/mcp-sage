@@ -67,20 +67,3 @@ export function getModel(modelId: string): ModelConfig | undefined {
     costPerOutputToken: modelDef.costPerOutputToken,
   };
 }
-
-// These exports maintain backward compatibility but should be phased out
-// They will throw errors if the models don't exist in the YAML
-function getModelConstant(modelId: string, field: 'name' | 'tokenLimit'): string | number {
-  const model = getModelById(modelId);
-  if (!model) {
-    throw new Error(`Model '${modelId}' not found in models.yaml`);
-  }
-  return field === 'name' ? model.name : model.tokenLimit;
-}
-
-export const GPT5_MODEL_NAME = getModelConstant('gpt5', 'name') as string;
-export const GPT5_TOKEN_LIMIT = getModelConstant('gpt5', 'tokenLimit') as number;
-export const GEMINI_MODEL_NAME = getModelConstant('gemini25pro', 'name') as string;
-export const GEMINI_TOKEN_LIMIT = getModelConstant('gemini25pro', 'tokenLimit') as number;
-export const OPUS41_MODEL_NAME = getModelConstant('opus41', 'name') as string;
-export const OPUS41_TOKEN_LIMIT = getModelConstant('opus41', 'tokenLimit') as number;

@@ -3,7 +3,7 @@
 import { Command } from "commander";
 import * as fs from "fs";
 import * as path from "path";
-import { GEMINI_MODEL_NAME, GEMINI_TOKEN_LIMIT } from "./modelDefinitions";
+import { getProviderDefaultModel, getModelById } from "./modelConfig";
 
 // Define the interface for Gemini API request
 interface GeminiRequest {
@@ -56,7 +56,7 @@ export async function sendGeminiPrompt(
   }
 
   // Default to Gemini 2.5 Pro Preview if no model is specified
-  const model = options.model || GEMINI_MODEL_NAME;
+  const model = options.model || getDefaultGeminiModel();
 
   if (notifyFn) {
     await notifyFn({
@@ -204,6 +204,21 @@ async function listModels(): Promise<void> {
     console.error("Error listing models:", error);
     throw error;
   }
+}
+
+/**
+ * Get the default Gemini model from configuration
+ */
+function getDefaultGeminiModel(): string {
+  const defaultModelId = getProviderDefaultModel('gemini');
+  if (!defaultModelId) {
+    throw new Error('No default Gemini model configured in models.yaml');
+  }
+  const model = getModelById(defaultModelId);
+  if (!model) {
+    throw new Error(`Default Gemini model '${defaultModelId}' not found in models.yaml`);
+  }
+  return model.name;
 }
 
 program

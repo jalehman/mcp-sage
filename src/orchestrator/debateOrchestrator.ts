@@ -20,7 +20,7 @@ import { getStrategy } from "../strategies/registry";
 import {
   selectModelBasedOnTokens,
   getAvailableModels,
-  sendToModelWithFallback,
+  sendToModel,
 } from "../modelManager";
 import { getToolConfig, getModelById } from "../modelConfig";
 
@@ -112,7 +112,7 @@ interface ModelResponse {
 }
 
 /**
- * Convert string response from sendToModelWithFallback to ModelResponse
+ * Convert string response from sendToModel to ModelResponse
  */
 function parseModelResponse(
   response: string,
@@ -282,7 +282,7 @@ export async function runDebate(
     try {
       // Generate the candidate
       const response = await timePhase<ModelResponse>("generate", async () => {
-        const rawResponse = await sendToModelWithFallback(
+        const rawResponse = await sendToModel(
           generatePrompt,
           {
             modelName,
@@ -391,7 +391,7 @@ export async function runDebate(
                 return response.text;
               } else {
                 // Make actual API call
-                const rawResponse = await sendToModelWithFallback(
+                const rawResponse = await sendToModel(
                   generatePrompt,
                   {
                     modelName,
@@ -543,7 +543,7 @@ export async function runDebate(
                 let response;
 
                 try {
-                  const rawResponse = await sendToModelWithFallback(
+                  const rawResponse = await sendToModel(
                     critiquePrompt,
                     {
                       modelName,
@@ -657,7 +657,7 @@ export async function runDebate(
             return parseModelResponse(mockResponse, judgePrompt.length);
           } else {
             // Make actual API call
-            const rawResponse = await sendToModelWithFallback(
+            const rawResponse = await sendToModel(
               judgePrompt,
               {
                 modelName: judgeModelName,
