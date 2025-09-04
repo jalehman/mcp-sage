@@ -8,6 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
+import { fileURLToPath } from 'url';
 import { ModelType } from './modelDefinitions';
 
 /**
@@ -69,7 +70,10 @@ export function loadModelConfig(): ModelConfiguration {
     return configInstance;
   }
 
-  const configPath = path.join(process.cwd(), 'models.yaml');
+  // Use __dirname to get the directory of this file, then navigate to the project root
+  // In the compiled version, this file will be at dist/modelConfig.js
+  // So we need to go up one level to get to the project root where models.yaml is
+  const configPath = path.join(__dirname, '..', 'models.yaml');
   
   try {
     const fileContents = fs.readFileSync(configPath, 'utf8');
