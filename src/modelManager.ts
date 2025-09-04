@@ -3,6 +3,7 @@
 import { analyzeXmlTokens } from "./tokenCounter";
 import { sendGeminiPrompt } from "./gemini";
 import { sendOpenAiPrompt } from "./openai";
+import { sendAnthropicPrompt } from "./anthropic";
 import {
   ModelType,
   ModelConfig,
@@ -13,6 +14,8 @@ import {
   GPT5_TOKEN_LIMIT,
   GEMINI_MODEL_NAME,
   GEMINI_TOKEN_LIMIT,
+  OPUS41_MODEL_NAME,
+  OPUS41_TOKEN_LIMIT,
 } from "./modelDefinitions";
 
 // Re-export model types and definitions for convenience
@@ -26,6 +29,8 @@ export {
   GPT5_TOKEN_LIMIT,
   GEMINI_MODEL_NAME,
   GEMINI_TOKEN_LIMIT,
+  OPUS41_MODEL_NAME,
+  OPUS41_TOKEN_LIMIT,
 };
 
 /**
@@ -66,6 +71,11 @@ export function getAvailableModels(): ModelConfig[] {
   if (hasGeminiKey) {
     availableModels.push({ ...Models.GEMINI, available: true });
   }
+
+  // TODO: but what if I want it as a participant? Best behavior is having the judging model not be a participant. How to encode that?
+
+  // Note: Claude Opus 4.1 is not included here as it's only used for judging,
+  // not as a debate participant
 
   return availableModels;
 }
@@ -207,6 +217,22 @@ export async function sendToModelWithFallback(
         { model: modelName },
         notifyAdapter,
         abortSignal,
+      );
+    }
+
+    if (modelType === "anthropic") {
+      await sendNotification({
+        method: "notifications/message",
+        params: {
+          level: "info",
+          data: `Sending request to Anthropic ${modelName} with ${tokenCount.toLocaleString()} tokens…`,
+        },
+      });
+      return await sendAnthropicPrompt(
+        combined,
+        { model: modelName },
+        abortSignal,
+        notifyAdapter,
       );
     }
 

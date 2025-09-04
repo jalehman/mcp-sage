@@ -22,6 +22,7 @@ import {
   getAvailableModels,
   sendToModelWithFallback,
 } from "../modelManager";
+import { OPUS41_MODEL_NAME } from "../modelDefinitions";
 
 // Type for notification function passed from MCP
 export type NotificationFn = (notification: {
@@ -611,10 +612,16 @@ export async function runDebate(
       data: "Judge phase: Selecting the best candidate...",
     });
 
-    // Select a judge model (for now, just use the first available model)
-    const judgeModelName = debateModels[0];
+    // Select the judge model - use Claude Opus 4.1 if Anthropic API key is available, 
+    // otherwise fallback to first debate model
+    const hasAnthropicKey = !!process.env.ANTHROPIC_API_KEY;
+    const judgeModelName = hasAnthropicKey 
+      ? OPUS41_MODEL_NAME 
+      : debateModels[0];
     const judgeModelType = judgeModelName.includes("gemini")
       ? "gemini"
+      : judgeModelName.includes("claude")
+      ? "anthropic"
       : "openai";
 
     // Create the judge prompt

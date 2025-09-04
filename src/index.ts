@@ -111,7 +111,10 @@ function createServer(): McpServer {
 
     IMPORTANT: All paths must be absolute paths (e.g., /home/user/project/src), not relative paths.
 
-    Do not worry about context limits; feel free to include as much as you think is relevant. If you include too much it will error and tell you, and then you can include less. Err on the side of including more context.`,
+    Do not worry about context limits; feel free to include as much as you think is relevant. If you include too much it will error and tell you, and then you can include less. Err on the side of including more context.
+    
+    If the user mentiones "sages" plural, or asks for a debate explicitly, enable debate mode by passing a debateConfig object with enabled set to true.
+    `,
     {
       prompt: z.string().describe("The prompt to send to the external model."),
       paths: z
@@ -121,13 +124,12 @@ function createServer(): McpServer {
         ),
       debateConfig: z
         .object({
-          enabled: z.boolean().optional(),
+          enabled: z.boolean().describe("Controls whether or not debates are enabled. Set to true when the user mentiones 'sages' plural.").optional(),
           rounds: z.number().optional(),
           maxTotalTokens: z.number().optional(),
           logLevel: z.enum(["warn", "info", "debug"]).optional(),
         })
-        .optional()
-        .describe("Configuration options for the debate process"),
+        .describe("Configuration options for the debate process. Set `enabled` to `true` when a multi-model debate should ensue, i.e. if the user mentions 'sages' plural."),
     },
     async ({ prompt, paths, debateConfig }, { sendNotification }) => {
       try {

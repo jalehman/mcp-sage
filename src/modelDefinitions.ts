@@ -9,7 +9,7 @@
 /**
  * Model type definition
  */
-export type ModelType = "openai" | "gemini";
+export type ModelType = "openai" | "gemini" | "anthropic";
 
 /**
  * Model information and capabilities
@@ -56,6 +56,13 @@ export const Models = {
     costPerInputToken: 1.25 / 1000000,
     costPerOutputToken: 10 / 1000000,
   },
+  OPUS41: {
+    name: "claude-opus-4-1-20250805",
+    type: "anthropic" as ModelType,
+    tokenLimit: 200000,
+    costPerInputToken: 15 / 1000000, // $15.00 per 1M input tokens
+    costPerOutputToken: 75 / 1000000, // $75.00 per 1M output tokens
+  },
 };
 
 // Constants for backward compatibility
@@ -65,3 +72,5 @@ export const GPT5_MODEL_NAME = Models.GPT5.name;
 export const GPT5_TOKEN_LIMIT = Models.GPT5.tokenLimit;
 export const GEMINI_MODEL_NAME = Models.GEMINI.name;
 export const GEMINI_TOKEN_LIMIT = Models.GEMINI.tokenLimit;
+export const OPUS41_MODEL_NAME = Models.OPUS41.name;
+export const OPUS41_TOKEN_LIMIT = Models.OPUS41.tokenLimit;

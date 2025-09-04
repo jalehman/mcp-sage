@@ -29,6 +29,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.61.0",
     "@dqbd/tiktoken": "^1.0.20",
     "@google/genai": "^0.9.0",
     "@modelcontextprotocol/sdk": "^1.10.0",
